@@ -1,0 +1,2 @@
+# This file ensures the downloads directory is tracked by git
+# but the downloaded files are ignored
