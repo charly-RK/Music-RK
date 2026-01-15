@@ -122,14 +122,6 @@ La aplicación requiere los siguientes permisos en Android:
 
 - [Configuración del Backend](backend/README.md)
 
-## 🎯 Características Próximas
-
-- [ ] Ecualizador integrado
-- [ ] Letras de canciones
-- [ ] Compartir canciones
-- [ ] Temas personalizables
-- [ ] Sincronización en la nube
-- [ ] Soporte para podcasts
 
 ## 🐛 Problemas Conocidos
 
@@ -147,9 +139,6 @@ Este proyecto es privado y no está disponible para uso público sin autorizaci�
 ## 👨‍💻 Autor
 
 **RISK KEEP**
-
-## 🙏 Agradecimientos
-
 
 
 ---
