@@ -121,8 +121,6 @@ La aplicación requiere los siguientes permisos en Android:
 ## 📖 Documentación Adicional
 
 - [Configuración del Backend](backend/README.md)
-- [Despliegue en Railway](backend/DEPLOY_RAILWAY.md)
-- [Configuración del Backend en Flutter](musicrk/SETUP_BACKEND.md)
 
 ## 🎯 Características Próximas
 
@@ -148,14 +146,10 @@ Este proyecto es privado y no está disponible para uso público sin autorizaci�
 
 ## 👨‍💻 Autor
 
-**RISK**
+**RISK KEEP**
 
 ## 🙏 Agradecimientos
 
-- Flutter Team por el excelente framework
-- Comunidad de desarrolladores de Flutter
-- Todos los paquetes de código abierto utilizados en este proyecto
+
 
 ---
-
-**Nota**: Esta aplicación está en desarrollo activo. Las características y la documentación pueden cambiar.

@@ -67,6 +67,7 @@ class SongOptionsSheet extends StatelessWidget {
                       height: MediaQuery.of(context).size.width * 0.15,
                       constraints: const BoxConstraints(
                         minWidth: 50,
+                        
                         maxWidth: 70,
                         minHeight: 50,
                         maxHeight: 70,

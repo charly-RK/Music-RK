@@ -534,6 +534,13 @@ class _AlbumPageState extends State<AlbumPage> {
     final bool isSameContext = _audioService.playlistContext == contextId;
     final bool showPause = _isPlaying && isCurrentSongInAlbum && isSameContext;
 
+    // Responsive sizing
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final headerHeight = screenHeight * 0.42; 
+    final albumArtSize = screenWidth * 0.35; 
+    final playButtonSize = screenWidth * 0.16; 
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -542,7 +549,7 @@ class _AlbumPageState extends State<AlbumPage> {
             children: [
               // --- Header ---
               Container(
-                height: 380,
+                height: headerHeight.clamp(300.0, 400.0), 
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -573,13 +580,13 @@ class _AlbumPageState extends State<AlbumPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 2),
                       // Album Art
                       Hero(
                         tag: 'album_art_${widget.album['name']}',
                         child: Container(
-                          width: 150,
-                          height: 150,
+                          width: albumArtSize.clamp(100.0, 150.0),
+                          height: albumArtSize.clamp(100.0, 150.0),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white10, width: 2),
@@ -596,36 +603,36 @@ class _AlbumPageState extends State<AlbumPage> {
                                 ? QueryArtworkWidget(
                                     id: _songs.first.id,
                                     type: ArtworkType.AUDIO,
-                                    artworkWidth: 150,
-                                    artworkHeight: 150,
+                                    artworkWidth: albumArtSize.clamp(100.0, 150.0).toDouble(),
+                                    artworkHeight: albumArtSize.clamp(100.0, 150.0).toDouble(),
                                     artworkQuality: FilterQuality.medium,
                                     keepOldArtwork: true,
                                     artworkFit: BoxFit.cover,
                                     size: 300, // Optimized size
                                     nullArtworkWidget: Container(
                                       color: Colors.grey[900],
-                                      child: const Icon(Icons.music_note, size: 80, color: Colors.white24),
+                                      child: Icon(Icons.music_note, size: albumArtSize.clamp(100.0, 150.0) * 0.5, color: Colors.white24),
                                     ),
                                   )
                                 : Container(
                                     color: Colors.grey[900],
-                                    child: const Icon(Icons.album, size: 80, color: Colors.white24),
+                                    child: Icon(Icons.album, size: albumArtSize.clamp(100.0, 150.0) * 0.5, color: Colors.white24),
                                   ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
                       Text(
                         widget.album['name'] ?? "Álbum Desconocido",
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       // Info Row (Songs | Duration)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -703,7 +710,7 @@ class _AlbumPageState extends State<AlbumPage> {
           
           // Floating Controls (Play + Shuffle)
           Positioned(
-            top: 350,
+            top: headerHeight.clamp(300.0, 400.0) - 30, 
             left: 0,
             right: 0,
             child: Row(
@@ -724,8 +731,8 @@ class _AlbumPageState extends State<AlbumPage> {
                     }
                   },
                   child: Container(
-                    width: 60,
-                    height: 60,
+                    width: playButtonSize.clamp(50.0, 60.0),
+                    height: playButtonSize.clamp(50.0, 60.0),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE91E63),
                       shape: BoxShape.circle,
@@ -740,7 +747,7 @@ class _AlbumPageState extends State<AlbumPage> {
                     child: Icon(
                       showPause ? Icons.pause_rounded : Icons.play_arrow_rounded,
                       color: Colors.white,
-                      size: 32,
+                      size: playButtonSize.clamp(50.0, 60.0) * 0.5,
                     ),
                   ),
                 ),
@@ -754,8 +761,8 @@ class _AlbumPageState extends State<AlbumPage> {
                     _showSortModeOverlay();
                   },
                   child: Container(
-                    width: 40,
-                    height: 40,
+                    width: playButtonSize.clamp(50.0, 60.0) * 0.7,
+                    height: playButtonSize.clamp(50.0, 60.0) * 0.7,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -771,10 +778,10 @@ class _AlbumPageState extends State<AlbumPage> {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.shuffle_rounded,
                       color: Colors.black87,
-                      size: 20,
+                      size: playButtonSize.clamp(50.0, 60.0) * 0.35,
                     ),
                   ),
                 ),
@@ -796,7 +803,7 @@ class _AlbumPageState extends State<AlbumPage> {
 
   Widget _buildInfoBadge(String text, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(30),
@@ -812,13 +819,13 @@ class _AlbumPageState extends State<AlbumPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.white.withOpacity(0.9)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 12, color: Colors.white.withOpacity(0.9)),
+          const SizedBox(width: 4),
           Text(
             text,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 13,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.5,
             ),

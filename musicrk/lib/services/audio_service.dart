@@ -150,13 +150,34 @@ class AudioService {
   bool _isValidSong(SongModel song) {
     final path = song.data.toLowerCase();
     final displayName = song.displayName.toLowerCase();
+    final title = song.title.toLowerCase();
     
+    // Filter 1: Only MP3 files
     if (!path.endsWith('.mp3')) {
       return false;
     }
 
-    if (displayName.startsWith('aud-') && displayName.contains('-wa')) {
+    // Filter 2: AUD Files - Filter out files starting with 'aud-' (case insensitive)
+    if (displayName.startsWith('aud-')) {
       return false;
+    }
+
+    // Filter 3: Numeric Sequences - Filter out files with 6+ consecutive digits
+    final numericPattern = RegExp(r'\d{6,}');
+    if (numericPattern.hasMatch(displayName) || numericPattern.hasMatch(title)) {
+      return false;
+    }
+
+    // Filter 4: Domain Names - Filter out files containing common domain extensions
+    final domainExtensions = [
+      '.io', '.app', '.com', '.net', '.org', '.co', 
+      '.me', '.dev', '.xyz', '.tech', '.online', '.site'
+    ];
+    
+    for (final extension in domainExtensions) {
+      if (displayName.contains(extension) || title.contains(extension)) {
+        return false;
+      }
     }
 
     return true;
