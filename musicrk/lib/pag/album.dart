@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:just_audio/just_audio.dart';
@@ -24,7 +25,8 @@ class _AlbumPageState extends State<AlbumPage> {
   bool _isLoading = true;
   String _totalDuration = "";
   bool _isPlaying = false;
-  String _sortOrder = 'default'; // default, alphabetic, artist
+  String _sortOrder = 'title'; 
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -32,15 +34,24 @@ class _AlbumPageState extends State<AlbumPage> {
     _loadSortOrder();
     _loadSongs();
     
-    // Listen to playback state
+    // Escuchar el estado de reproducción
     _audioService.playingStream.listen((playing) {
       if (mounted) setState(() => _isPlaying = playing);
     });
     
-    // Listen to current song changes
+    // Escuchar los cambios de la canción actual
     _audioService.currentSongStream.listen((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
+    super.dispose();
   }
   
   
@@ -60,12 +71,12 @@ class _AlbumPageState extends State<AlbumPage> {
         );
         songs = allSongs.where((song) => song.data.startsWith(folderPath)).toList();
       } else {
-        // Custom album logic
+        // Lógica de álbum personalizada
         final songPaths = await DatabaseHelper.instance.getAlbumSongs(widget.album['id']);
         if (songPaths.isNotEmpty) {
-          // Query all songs to get details, then filter by path
-          // Note: Querying all songs might be slow. Optimization: Query specific paths if possible or cache.
-          // For now, we query all and filter, which is safe but maybe not most efficient.
+          // Consultar todas las canciones para obtener detalles, luego filtrar por ruta
+          // Nota: Consultar todas las canciones puede ser lento. Optimización: Consultar rutas específicas si es posible o cachear.
+          // Por ahora, consultamos todas y filtramos, lo cual es seguro pero quizás no sea la más eficiente.
           final allSongs = await _audioQuery.querySongs(
             sortType: SongSortType.TITLE,
             orderType: OrderType.ASC_OR_SMALLER,
@@ -73,7 +84,7 @@ class _AlbumPageState extends State<AlbumPage> {
             ignoreCase: true,
           );
           
-          // Filter songs that match the paths in the album
+          // Filtrar canciones que coincidan con los paths en el álbum
           songs = allSongs.where((song) => songPaths.contains(song.data)).toList();
         } else {
           songs = [];
@@ -83,10 +94,10 @@ class _AlbumPageState extends State<AlbumPage> {
       debugPrint("Error loading songs: $e");
     }
 
-    // Apply sorting
+    // Aplicar ordenamiento
     _applySorting(songs);
 
-    // Calculate total duration
+    // Calcular la duración total
     int totalMs = songs.fold(0, (sum, song) => sum + (song.duration ?? 0));
     int totalMinutes = (totalMs / 1000 / 60).floor();
     String formattedDuration;
@@ -121,82 +132,83 @@ class _AlbumPageState extends State<AlbumPage> {
   }
 
   void _applySorting(List<SongModel> songs) {
-    switch (_sortOrder) {
-      case 'alphabetic':
-        songs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        break;
-      case 'artist':
-        songs.sort((a, b) {
-          final artistA = a.artist?.toLowerCase() ?? '';
-          final artistB = b.artist?.toLowerCase() ?? '';
-          return artistA.compareTo(artistB);
-        });
-        break;
-      case 'default':
-      default:
-        // Keep original order
-        break;
+    if (_sortOrder == 'artist') {
+      songs.sort((a, b) => (a.artist ?? "").toLowerCase().compareTo((b.artist ?? "").toLowerCase()));
+    } else if (_sortOrder == 'album') {
+      songs.sort((a, b) => (a.album ?? "").toLowerCase().compareTo((b.album ?? "").toLowerCase()));
+    } else {
+      // title order
+      songs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     }
   }
 
   void _cycleSortOrder() {
     setState(() {
-      if (_sortOrder == 'default') {
-        _sortOrder = 'alphabetic';
-      } else if (_sortOrder == 'alphabetic') {
+      if (_sortOrder == 'title') {
         _sortOrder = 'artist';
+      } else if (_sortOrder == 'artist') {
+        _sortOrder = 'album';
       } else {
-        _sortOrder = 'default';
+        _sortOrder = 'title';
       }
     });
     _saveSortOrder();
     _loadSongs();
+
+    String message = _sortOrder == 'title' 
+        ? 'Título' 
+        : _sortOrder == 'album' 
+            ? 'Álbum' 
+            : 'Artista';
+            
+    _showCustomToast(message, _sortOrder);
   }
 
-  void _showSortModeOverlay() {
-    String modeText;
-    switch (_sortOrder) {
-      case 'alphabetic':
-        modeText = 'Ordenado Alfabéticamente';
-        break;
-      case 'artist':
-        modeText = 'Ordenado por Artista';
-        break;
-      default:
-        modeText = 'Modo Aleatorio';
+  void _showCustomToast(String message, String iconType) {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
     }
 
-    final overlay = Overlay.of(context);
-    final overlayEntry = OverlayEntry(
+    IconData sortIcon = Icons.sort_by_alpha_rounded;
+    if (iconType == 'album') sortIcon = Icons.album_rounded;
+    if (iconType == 'artist') sortIcon = Icons.person_rounded;
+
+    _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: MediaQuery.of(context).size.height * 0.4,
-        left: 50,
-        right: 50,
+        top: MediaQuery.of(context).size.height / 2 - 25,
+        left: 0,
+        right: 0,
         child: Material(
           color: Colors.transparent,
           child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1F3D).withOpacity(0.85),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.25), // Más transparente
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
-                ],
-              ),
-              child: Text(
-                modeText,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.3,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(sortIcon, color: const Color(0xFFE91E63), size: 18), // Icono más pequeño
+                      const SizedBox(width: 8),
+                      Text(
+                        message,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5, // Texto más pequeño
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ),
           ),
@@ -204,9 +216,13 @@ class _AlbumPageState extends State<AlbumPage> {
       ),
     );
 
-    overlay.insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 2), () {
-      overlayEntry.remove();
+    Overlay.of(context).insert(_overlayEntry!);
+    
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (_overlayEntry != null && mounted) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      }
     });
   }
 
@@ -278,7 +294,7 @@ class _AlbumPageState extends State<AlbumPage> {
         deleteSubtitle: isCustomAlbum ? "Quitar canción de este álbum" : null,
         onDelete: isCustomAlbum ? () async {
            await DatabaseHelper.instance.removeSongFromAlbum(widget.album['id'], song.data);
-           _loadSongs(); // Refresh list
+           _loadSongs(); // Refrescar lista
            if (mounted) {
              ScaffoldMessenger.of(context).showSnackBar(
                const SnackBar(content: Text("Canción eliminada del álbum")),
@@ -512,8 +528,8 @@ class _AlbumPageState extends State<AlbumPage> {
             onPressed: () async {
               await DatabaseHelper.instance.deleteAlbum(widget.album['id']);
               if (mounted) {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Close page
+                Navigator.pop(context); // Cerrar diálogo
+                Navigator.pop(context); // Cerrar página
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(isFolder ? "Carpeta desvinculada" : "Álbum eliminado")),
                 );
@@ -534,10 +550,10 @@ class _AlbumPageState extends State<AlbumPage> {
     final bool isSameContext = _audioService.playlistContext == contextId;
     final bool showPause = _isPlaying && isCurrentSongInAlbum && isSameContext;
 
-    // Responsive sizing
+    // Dimensionamiento responsivo
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    final headerHeight = screenHeight * 0.42; 
+    final headerHeight = screenHeight * 0.39; 
     final albumArtSize = screenWidth * 0.35; 
     final playButtonSize = screenWidth * 0.16; 
 
@@ -547,9 +563,9 @@ class _AlbumPageState extends State<AlbumPage> {
         children: [
           Column(
             children: [
-              // --- Header ---
+              // --- Encabezado ---
               Container(
-                height: headerHeight.clamp(300.0, 400.0), 
+                height: headerHeight.clamp(250.0, 350.0), 
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -565,23 +581,40 @@ class _AlbumPageState extends State<AlbumPage> {
                   child: Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 0.0, bottom: 0.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                                onPressed: () => Navigator.pop(context),
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.more_vert, color: Colors.white),
-                              onPressed: _showAlbumOptions,
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
+                                onPressed: _showAlbumOptions,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      // Album Art
+                      // album de arte
                       Hero(
                         tag: 'album_art_${widget.album['name']}',
                         child: Container(
@@ -605,10 +638,10 @@ class _AlbumPageState extends State<AlbumPage> {
                                     type: ArtworkType.AUDIO,
                                     artworkWidth: albumArtSize.clamp(100.0, 150.0).toDouble(),
                                     artworkHeight: albumArtSize.clamp(100.0, 150.0).toDouble(),
-                                    artworkQuality: FilterQuality.medium,
+                                    artworkQuality: FilterQuality.low,
                                     keepOldArtwork: true,
                                     artworkFit: BoxFit.cover,
-                                    size: 300, // Optimized size
+                                    size: 200, // Tamaño optimizado para memoria
                                     nullArtworkWidget: Container(
                                       color: Colors.grey[900],
                                       child: Icon(Icons.music_note, size: albumArtSize.clamp(100.0, 150.0) * 0.5, color: Colors.white24),
@@ -633,7 +666,7 @@ class _AlbumPageState extends State<AlbumPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      // Info Row (Songs | Duration)
+                      // Fila de información (Canciones | Duración)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -646,7 +679,7 @@ class _AlbumPageState extends State<AlbumPage> {
                   ),
                 ),
               ),
-              // --- List ---
+              // --- Lista ---
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _loadSongs,
@@ -662,38 +695,11 @@ class _AlbumPageState extends State<AlbumPage> {
                                   style: TextStyle(color: Colors.grey[600]),
                                 ),
                               )
-                            : ReorderableListView.builder(
-                              padding: const EdgeInsets.only(top: 30, bottom: 100),
+                            : ListView.builder(
+                              padding: const EdgeInsets.only(top: 25, bottom: 100),
                               itemCount: _songs.length,
-                              proxyDecorator: (child, index, animation) {
-                                return Material(
-                                  elevation: 0,
-                                  color: Colors.transparent,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.95),
-                                      borderRadius: BorderRadius.circular(15),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.2),
-                                          blurRadius: 15,
-                                          offset: const Offset(0, 5),
-                                        ),
-                                      ],
-                                    ),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              onReorder: (oldIndex, newIndex) {
-                                setState(() {
-                                  if (oldIndex < newIndex) {
-                                    newIndex -= 1;
-                                  }
-                                  final SongModel item = _songs.removeAt(oldIndex);
-                                  _songs.insert(newIndex, item);
-                                });
-                              },
+                              itemExtent: 68, // Altura fija para scroll ultra suave
+                              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                               itemBuilder: (context, index) {
                                 final song = _songs[index];
                                 return RepaintBoundary(
@@ -708,18 +714,18 @@ class _AlbumPageState extends State<AlbumPage> {
             ],
           ),
           
-          // Floating Controls (Play + Shuffle)
+          // Controles flotantes (Reproducir + Mezclar)
           Positioned(
-            top: headerHeight.clamp(300.0, 400.0) - 30, 
+            top: headerHeight.clamp(250.0, 350.0) - 30,
             left: 0,
             right: 0,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Dummy spacer to balance the Shuffle button and keep Play centered
+                // Dummy spacer para balancear el botón de Mezclar y mantener el botón de Reproducir centrado
                 const SizedBox(width: 50), 
                 
-                // Play Button
+                // Botón de Reproducir
                 GestureDetector(
                   onTap: () {
                     // Si está reproduciendo Y es del mismo contexto (este álbum), toggle play/pause
@@ -754,12 +760,9 @@ class _AlbumPageState extends State<AlbumPage> {
 
                 const SizedBox(width: 10),
 
-                // Sort Mode Button (replaces Shuffle)
+                // Botón de Modo de Orden (reemplaza Mezclar)
                 GestureDetector(
-                  onTap: () {
-                    _cycleSortOrder();
-                    _showSortModeOverlay();
-                  },
+                  onTap: _cycleSortOrder,
                   child: Container(
                     width: playButtonSize.clamp(50.0, 60.0) * 0.7,
                     height: playButtonSize.clamp(50.0, 60.0) * 0.7,
@@ -791,9 +794,9 @@ class _AlbumPageState extends State<AlbumPage> {
 
           // Bottom Player (Global)
           Positioned(
-            bottom: 20,
-            left: 20,
-            right: 20,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: _buildBottomPlayer(),
           ),
         ],
@@ -840,7 +843,7 @@ class _AlbumPageState extends State<AlbumPage> {
     IconData sortIcon;
     
     switch (_sortOrder) {
-      case 'alphabetic':
+      case 'title':
         sortLabel = 'A-Z';
         sortIcon = Icons.sort_by_alpha_rounded;
         break;
@@ -848,9 +851,13 @@ class _AlbumPageState extends State<AlbumPage> {
         sortLabel = 'Artista';
         sortIcon = Icons.person_outline_rounded;
         break;
+      case 'album':
+        sortLabel = 'Álbum';
+        sortIcon = Icons.album_rounded;
+        break;
       default:
-        sortLabel = 'Original';
-        sortIcon = Icons.list_rounded;
+        sortLabel = 'A-Z';
+        sortIcon = Icons.sort_by_alpha_rounded;
     }
 
     return GestureDetector(
@@ -890,134 +897,104 @@ class _AlbumPageState extends State<AlbumPage> {
         color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(15),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _playAlbum(index),
-          borderRadius: BorderRadius.circular(15),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Song Number
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    '${index + 1}',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[600],
-                    ),
-                  ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 25,
+              child: Text(
+                '${index + 1}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[600],
                 ),
-                const SizedBox(width: 12),
-                // Album Art with Gradient
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.grey[200]!,
-                        Colors.grey[100]!,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        QueryArtworkWidget(
-                          id: song.id,
-                          type: ArtworkType.AUDIO,
-                          artworkWidth: 50,
-                          artworkHeight: 50,
-                          artworkQuality: FilterQuality.low,
-                          keepOldArtwork: true,
-                          size: 100, // Optimized size
-                          nullArtworkWidget: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.grey[300]!,
-                                  Colors.grey[200]!,
-                                ],
-                              ),
-                            ),
-                            child: const Icon(Icons.music_note, color: Colors.grey),
-                          ),
-                        ),
-                        if (isCurrentSong && _isPlaying)
-                          Container(
-                            color: Colors.black.withOpacity(0.4),
-                            child: const Center(
-                              child: Icon(Icons.equalizer_rounded, color: Colors.white, size: 20),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Song Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        song.title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: isCurrentSong ? FontWeight.bold : FontWeight.w600,
-                          color: isCurrentSong ? const Color(0xFFE91E63) : Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        song.artist ?? "Desconocido",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.8) : Colors.grey[600],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Duration
-                Text(
-                  "${(song.duration ?? 0) ~/ 60000}:${((song.duration ?? 0) ~/ 1000 % 60).toString().padLeft(2, '0')}",
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[500],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Options Button
-                IconButton(
-                  icon: Icon(Icons.more_vert_rounded,
-                      color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[400],
-                      size: 22),
-                  onPressed: () => _showSongOptions(song),
-                ),
-              ],
+              ),
             ),
+            const SizedBox(width: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: QueryArtworkWidget(
+                id: song.id,
+                type: ArtworkType.AUDIO,
+                artworkWidth: 45,
+                artworkHeight: 45,
+                artworkQuality: FilterQuality.low,
+                keepOldArtwork: true,
+                size: 100, // Tamaño optimizado
+                nullArtworkWidget: Container(
+                  width: 45,
+                  height: 45,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.music_note, color: Colors.grey[400]),
+                ),
+              ),
+            ),
+          ],
+        ),
+        title: Text(
+          song.title,
+          style: TextStyle(
+            fontSize: 15, 
+            fontWeight: isCurrentSong ? FontWeight.bold : FontWeight.w600,
+            color: isCurrentSong ? const Color(0xFFE91E63) : const Color(0xFF2C3E50),
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  song.artist ?? "Desconocido",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.7) : Colors.grey[600],
+                    fontWeight: FontWeight.w400,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "${(song.duration ?? 0) ~/ 60000}:${((song.duration ?? 0) ~/ 1000 % 60).toString().padLeft(2, '0')}",
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isCurrentSong && _isPlaying)
+              const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Icon(Icons.graphic_eq, color: Color(0xFFE91E63), size: 20),
+              ),
+            IconButton(
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
+              onPressed: () => _showSongOptions(song),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              iconSize: 20,
+            ),
+          ],
+        ),
+        onTap: () => _playAlbum(index),
+        onLongPress: () => _showSongOptions(song),
       ),
     );
   }

@@ -56,24 +56,48 @@ class _PlaylistsPageState extends State<PlaylistsPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                       ),
                       const Expanded(
-                        child: Center(
-                          child: Text(
-                            'Mis Playlists',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20,
-                              color: Colors.white,
-                            ),
+                        child: Text(
+                          'Mis Playlists',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                      // Placeholder for symmetry or search
-                      const SizedBox(width: 48), 
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.playlist_add_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: _showCreatePlaylistDialog, // Reutilizamos el botón inferior
+                        ),
+                      ),
                     ],
                   ),
                 ),

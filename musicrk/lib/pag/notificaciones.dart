@@ -106,18 +106,27 @@ class _NotificacionesPageState extends State<NotificacionesPage> {
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
                       child: Row(
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                            onPressed: () => Navigator.pop(context),
+                          Container(
+                            margin: const EdgeInsets.only(right: 12),
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                              onPressed: () => Navigator.pop(context),
+                            ),
                           ),
-                          const SizedBox(width: 4),
                           const Expanded(
                             child: Text(
                               "Notificaciones",
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
                                 letterSpacing: 0.5,
                               ),
                             ),
@@ -157,7 +166,6 @@ class _NotificacionesPageState extends State<NotificacionesPage> {
                     // Notifications List
                     Expanded(
                       child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: const BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),

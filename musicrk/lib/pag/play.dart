@@ -20,9 +20,6 @@ class PlayPage extends StatefulWidget {
 
 class _PlayPageState extends State<PlayPage> {
   final AudioService _audioService = AudioService();
-  bool _isPlaying = false;
-  Duration _currentPosition = Duration.zero;
-  Duration _totalDuration = Duration.zero;
   SongModel? _currentSong;
   bool _isDismissed = false;
   bool _isFavorite = false;
@@ -31,62 +28,30 @@ class _PlayPageState extends State<PlayPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize data immediately for UI
+    // Inicializar datos inmediatamente para la interfaz de usuario
     if (widget.songIndex >= 0 && widget.songIndex < _audioService.songs.length) {
       _currentSong = _audioService.songs[widget.songIndex];
-      // Try to get duration from song model if available (though usually it's in milliseconds in the model)
-      if (_currentSong?.duration != null) {
-         _totalDuration = Duration(milliseconds: _currentSong!.duration!);
-      }
     }
     _initializePlayer();
     _checkFavorite();
   }
 
   Future<void> _initializePlayer() async {
-    // Initialize player and update UI in one go if possible
+    // Inicializar el reproductor y actualizar la interfaz de usuario en un solo paso si es posible
     if (_audioService.currentIndex != widget.songIndex || !_audioService.isSongLoaded) {
       await _audioService.playSong(widget.songIndex);
     }
     
     if (mounted && !_isDismissed) {
       setState(() {
-        _currentSong = _audioService.songs[widget.songIndex];
-        _isPlaying = _audioService.player.playing;
-        if (_audioService.player.duration != null) {
-          _totalDuration = _audioService.player.duration!;
-        }
-        // Also get current song from service to be sure
-        _currentSong = _audioService.currentSong;
+        _currentSong = _audioService.currentSong ?? _audioService.songs[widget.songIndex];
       });
     }
-    
-    // Listen to streams
-    _audioService.playingStream.listen((playing) {
-      if (mounted && !_isDismissed && _isPlaying != playing) {
-        setState(() => _isPlaying = playing);
-      }
-    });
-
-    _audioService.positionStream.listen((position) {
-      if (mounted && !_isDismissed) {
-        setState(() => _currentPosition = position);
-      }
-    });
-
-    _audioService.durationStream.listen((duration) {
-      if (mounted && duration != null && !_isDismissed) {
-        setState(() => _totalDuration = duration);
-      }
-    });
 
     _songSubscription = _audioService.currentSongStream.listen((_) {
       if (mounted && !_isDismissed) {
         setState(() {
           _currentSong = _audioService.currentSong;
-          if (_audioService.player.duration != null) {
-            _totalDuration = _audioService.player.duration!;
-          }
         });
         _checkFavorite();
       }
@@ -117,15 +82,15 @@ class _PlayPageState extends State<PlayPage> {
       return album;
     }
 
-    // Try to get folder name
+    // Intentar obtener el nombre de la carpeta
     try {
       final path = _currentSong!.data;
       final parts = path.split('/');
       if (parts.length > 1) {
-        return parts[parts.length - 2]; // Parent folder
+        return parts[parts.length - 2]; // Carpeta principal
       }
     } catch (e) {
-      // ignore
+      // ignorar
     }
     
     return 'Carpeta Desconocida';
@@ -204,7 +169,7 @@ class _PlayPageState extends State<PlayPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Prevent rebuild if already dismissed
+    // Prevenir reconstrucción si ya se ha descartado
     if (_isDismissed) {
       return const SizedBox.shrink();
     }
@@ -220,7 +185,7 @@ class _PlayPageState extends State<PlayPage> {
         direction: DismissDirection.down,
         onDismissed: (_) {
           _isDismissed = true;
-          // Defer pop to next frame to prevent blocking touch events
+          // Retrasar la eliminación para evitar bloquear los eventos táctiles
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               Navigator.pop(context);
@@ -229,25 +194,13 @@ class _PlayPageState extends State<PlayPage> {
         },
         child: GestureDetector(
           onHorizontalDragEnd: (details) {
-            // Swipe detection
+            // Detección de deslizamiento
             if (details.primaryVelocity! > 500) {
-              // Swipe right -> Previous song
-              _audioService.playPrevious().then((_) {
-                if (mounted && !_isDismissed) {
-                  setState(() {
-                    _currentSong = _audioService.currentSong;
-                  });
-                }
-              });
+              // Deslizamiento derecho -> Canción anterior
+              _audioService.playPrevious();
             } else if (details.primaryVelocity! < -500) {
-              // Swipe left -> Next song
-              _audioService.playNext().then((_) {
-                if (mounted && !_isDismissed) {
-                  setState(() {
-                    _currentSong = _audioService.currentSong;
-                  });
-                }
-              });
+              // Deslizamiento izquierdo -> Siguiente canción
+              _audioService.playNext();
             }
           },
           child: Stack(
@@ -288,24 +241,28 @@ class _PlayPageState extends State<PlayPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            width: 36,
+                            height: 36,
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
-                              icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 24),
                               onPressed: () => Navigator.pop(context),
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            width: 36,
+                            height: 36,
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
-                              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
                               onPressed: _showOptions,
                             ),
                           ),
@@ -427,54 +384,8 @@ class _PlayPageState extends State<PlayPage> {
                         ),
                         const SizedBox(height: 30),
                         
-                        // Barra de Progreso
-                        SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            activeTrackColor: Colors.white,
-                            inactiveTrackColor: Colors.white.withOpacity(0.2),
-                            thumbColor: Colors.white,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                            trackHeight: 4,
-                            trackShape: const RoundedRectSliderTrackShape(),
-                          ),
-                          child: Slider(
-                            value: _totalDuration.inMilliseconds > 0
-                                ? _currentPosition.inMilliseconds.toDouble().clamp(0, _totalDuration.inMilliseconds.toDouble())
-                                : 0,
-                            max: _totalDuration.inMilliseconds.toDouble() > 0
-                                ? _totalDuration.inMilliseconds.toDouble()
-                                : 1,
-                            onChanged: (value) {
-                              final newPosition = Duration(milliseconds: value.toInt());
-                              _audioService.seek(newPosition);
-                            },
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _formatDuration(_currentPosition),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.7),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                _formatDuration(_totalDuration),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.7),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        // Barra de Progreso Autónoma
+                        _ProgressBar(audioService: _audioService),
                         
                         const SizedBox(height: 20),
                         
@@ -485,51 +396,13 @@ class _PlayPageState extends State<PlayPage> {
                             IconButton(
                               icon: const Icon(Icons.skip_previous_rounded, size: 42),
                               color: Colors.white,
-                              onPressed: () async {
-                                await _audioService.playPrevious();
-                                if (mounted && !_isDismissed) {
-                                  setState(() {
-                                    _currentSong = _audioService.currentSong;
-                                  });
-                                }
-                              },
+                              onPressed: () => _audioService.playPrevious(),
                             ),
-                            GestureDetector(
-                              onTap: () async {
-                                await _audioService.togglePlayPause();
-                              },
-                              child: Container(
-                                width: 75,
-                                height: 75,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.3),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                  color: const Color(0xFF1A1F3D),
-                                  size: 38,
-                                ),
-                              ),
-                            ),
+                            _PlayPauseButton(audioService: _audioService),
                             IconButton(
                               icon: const Icon(Icons.skip_next_rounded, size: 42),
                               color: Colors.white,
-                              onPressed: () async {
-                                await _audioService.playNext();
-                                if (mounted && !_isDismissed) {
-                                  setState(() {
-                                    _currentSong = _audioService.currentSong;
-                                  });
-                                }
-                              },
+                              onPressed: () => _audioService.playNext(),
                             ),
                           ],
                         ),
@@ -579,7 +452,7 @@ class _BigPlayerArtState extends State<BigPlayerArt> {
   }
 
   Future<void> _loadArt() async {
-    // Optimized: Load at 300x300 for better performance
+    // Optimizado: Cargar a 300x300 para mejor rendimiento
     final art = await widget.audioService.getAlbumArt(widget.songId, size: 300);
     if (mounted) {
       setState(() {
@@ -599,7 +472,7 @@ class _BigPlayerArtState extends State<BigPlayerArt> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Removed fixed width/height to allow responsiveness
+      // Eliminado ancho/alto fijo para permitir la capacidad de respuesta
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(30),
         image: _artImage != null
@@ -608,7 +481,7 @@ class _BigPlayerArtState extends State<BigPlayerArt> {
                 fit: BoxFit.cover,
               )
             : const DecorationImage(
-                image: NetworkImage('https://picsum.photos/800'),
+                image: AssetImage('assets/images/carpeta_2.jpg'),
                 fit: BoxFit.cover,
               ),
         boxShadow: [
@@ -660,7 +533,7 @@ class _BackgroundArtState extends State<BackgroundArt> {
       return;
     }
     
-    // Optimized: Load smaller image for background since it's blurred
+    // Optimizado: Cargar imagen más pequeña para el fondo ya que está difuminada
     final art = await widget.audioService.getAlbumArt(widget.songId!, size: 200);
     if (mounted) {
       setState(() {
@@ -678,7 +551,7 @@ class _BackgroundArtState extends State<BackgroundArt> {
     return Container(
       decoration: BoxDecoration(
         image: DecorationImage(
-          image: _artImage ?? const NetworkImage('https://picsum.photos/800'),
+          image: _artImage ?? const AssetImage('assets/images/carpeta_2.jpg'),
           fit: BoxFit.cover,
         ),
       ),
@@ -697,6 +570,149 @@ class _BackgroundArtState extends State<BackgroundArt> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgressBar extends StatefulWidget {
+  final AudioService audioService;
+  const _ProgressBar({required this.audioService});
+  @override
+  State<_ProgressBar> createState() => _ProgressBarState();
+}
+
+class _ProgressBarState extends State<_ProgressBar> {
+  Duration _currentPosition = Duration.zero;
+  Duration _totalDuration = Duration.zero;
+  late StreamSubscription _posSub;
+  late StreamSubscription _durSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPosition = widget.audioService.player.position;
+    _totalDuration = widget.audioService.player.duration ?? Duration.zero;
+    _posSub = widget.audioService.positionStream.listen((p) {
+      if (mounted) setState(() => _currentPosition = p);
+    });
+    _durSub = widget.audioService.durationStream.listen((d) {
+      if (mounted && d != null) setState(() => _totalDuration = d);
+    });
+  }
+
+  @override
+  void dispose() { 
+    _posSub.cancel(); 
+    _durSub.cancel(); 
+    super.dispose(); 
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: Colors.white,
+            inactiveTrackColor: Colors.white.withOpacity(0.2),
+            thumbColor: Colors.white,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            trackHeight: 4,
+            trackShape: const RoundedRectSliderTrackShape(),
+          ),
+          child: Slider(
+            value: _totalDuration.inMilliseconds > 0
+                ? _currentPosition.inMilliseconds.toDouble().clamp(0, _totalDuration.inMilliseconds.toDouble())
+                : 0,
+            max: _totalDuration.inMilliseconds.toDouble() > 0
+                ? _totalDuration.inMilliseconds.toDouble()
+                : 1,
+            onChanged: (value) {
+              widget.audioService.seek(Duration(milliseconds: value.toInt()));
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(_currentPosition),
+                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w500),
+              ),
+              Text(
+                _formatDuration(_totalDuration),
+                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlayPauseButton extends StatefulWidget {
+  final AudioService audioService;
+  const _PlayPauseButton({required this.audioService});
+  @override
+  State<_PlayPauseButton> createState() => _PlayPauseButtonState();
+}
+
+class _PlayPauseButtonState extends State<_PlayPauseButton> {
+  bool _isPlaying = false;
+  late StreamSubscription _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _isPlaying = widget.audioService.player.playing;
+    _sub = widget.audioService.playingStream.listen((p) {
+      if (mounted) setState(() => _isPlaying = p);
+    });
+  }
+
+  @override
+  void dispose() { 
+    _sub.cancel(); 
+    super.dispose(); 
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        await widget.audioService.togglePlayPause();
+      },
+      child: Container(
+        width: 75,
+        height: 75,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.white.withOpacity(0.3),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Icon(
+          _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          color: const Color(0xFF1A1F3D),
+          size: 38,
         ),
       ),
     );

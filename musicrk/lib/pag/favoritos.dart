@@ -69,7 +69,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
   void _playAll() {
     if (_favoriteSongs.isEmpty) return;
     
-    // Check if we are already playing from this list AND context
+    // Verificamos si ya estamos reproduciendo desde esta lista Y contexto
     final currentSong = _audioService.currentSong;
     final isPlaying = _audioService.player.playing;
     final bool isCurrentSongInList = currentSong != null && _favoriteSongs.any((s) => s.id == currentSong.id);
@@ -78,7 +78,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
     if (isCurrentSongInList && isSameContext) {
       _audioService.togglePlayPause();
     } else {
-      // If song is in list but context is different, switch context
+      // Si la canción está en la lista pero el contexto es diferente, cambia el contexto
       if (isCurrentSongInList) {
          final index = _favoriteSongs.indexWhere((s) => s.id == currentSong!.id);
          if (index != -1) {
@@ -96,7 +96,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
       backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
-          // Gradient Header
+          // Encabezado con gradiente
           Container(
             height: 200,
             decoration: const BoxDecoration(
@@ -111,35 +111,51 @@ class _FavoritosPageState extends State<FavoritosPage> {
           SafeArea(
             child: Column(
               children: [
-                // Custom AppBar
+                // Barra de navegación personalizada
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        "Favoritos",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.only(right: 12),
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.favorite_rounded,
-                          color: const Color(0xFFE91E63),
-                          size: 24,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                      const Expanded(
+                        child: Text(
+                          "Favoritos",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.favorite_rounded,
+                            color: Color(0xFFE91E63),
+                            size: 20,
+                          ),
+                          onPressed: () {}, // Decorativo o con acción futura
                         ),
                       ),
                     ],
@@ -148,7 +164,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
 
                 const SizedBox(height: 20),
 
-                  // Song Count Badge
+                  // Insignia de cantidad de canciones
                 if (!_isLoading && _favoriteSongs.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -178,7 +194,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
                           ),
                         ),
                         const Spacer(),
-                        // Play All Button
+                        // Botón Reproducir todo
                         GestureDetector(
                           onTap: _playAll,
                           child: Container(
@@ -220,7 +236,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
 
                 const SizedBox(height: 20),
 
-                // Content
+                // Contenido
                 Expanded(
                   child: Container(
                     decoration: const BoxDecoration(
@@ -268,15 +284,114 @@ class _FavoritosPageState extends State<FavoritosPage> {
                                   separatorBuilder: (_, __) => const SizedBox(height: 0),
                                   itemBuilder: (context, index) {
                                     final song = _favoriteSongs[index];
+                                    final bool isCurrentSong = _audioService.currentSong?.id == song.id;
+                                    
                                     return RepaintBoundary(
-                                      child: SongTile(
-                                        song: song,
-                                        audioService: _audioService,
-                                        isCurrentSong: _audioService.currentSong?.id == song.id,
-                                        onTap: () => _playSong(index),
-                                        onPlayTap: () => _playSong(index),
-                                        onLongPress: () => _showSongOptions(song),
-                                        onOptionTap: () => _showSongOptions(song),
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2), // Reducido para encajar con itemExtent
+                                        decoration: BoxDecoration(
+                                          color: Colors.transparent, // Fondo manejado por la hoja
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: ListTile(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          leading: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              SizedBox(
+                                                width: 25,
+                                                child: Text(
+                                                  '${index + 1}',
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: QueryArtworkWidget(
+                                                  id: song.id,
+                                                  type: ArtworkType.AUDIO,
+                                                  artworkWidth: 45,
+                                                  artworkHeight: 45,
+                                                  artworkQuality: FilterQuality.low,
+                                                  keepOldArtwork: true,
+                                                  size: 100, // Tamaño optimizado
+                                                  nullArtworkWidget: Container(
+                                                    width: 45,
+                                                    height: 45,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[200],
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Icon(Icons.music_note, color: Colors.grey[400]),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          title: Text(
+                                            song.title,
+                                            style: TextStyle(
+                                              fontSize: 15, 
+                                              fontWeight: isCurrentSong ? FontWeight.bold : FontWeight.w600,
+                                              color: isCurrentSong ? const Color(0xFFE91E63) : const Color(0xFF2C3E50),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          subtitle: Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    song.artist ?? "Desconocido",
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.7) : Colors.grey[600],
+                                                      fontWeight: FontWeight.w400,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  "${(song.duration ?? 0) ~/ 60000}:${((song.duration ?? 0) ~/ 1000 % 60).toString().padLeft(2, '0')}",
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey[500],
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (isCurrentSong && isPlaying)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(right: 8.0),
+                                                  child: Icon(Icons.graphic_eq, color: Color(0xFFE91E63), size: 20),
+                                                ),
+                                              IconButton(
+                                                icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
+                                                onPressed: () => _showSongOptions(song),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                iconSize: 20,
+                                              ),
+                                            ],
+                                          ),
+                                          onTap: () => _playSong(index),
+                                          onLongPress: () => _showSongOptions(song),
+                                        ),
                                       ),
                                     );
                                   },
@@ -288,7 +403,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
             ),
           ),
 
-          // Bottom Player
+          // Reproductor inferior
           Positioned(
             bottom: 0,
             left: 0,
@@ -339,7 +454,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
           if (index != -1) _playSong(index);
         },
         onAddToFavorites: () async {
-          // Logic to remove from favorites
+          // Lógica para eliminar de favoritos
           await DatabaseHelper.instance.removeFavorite(song.id);
           _loadFavorites();
           if (mounted) {
@@ -439,7 +554,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
         return BottomPlayer(
           audioService: _audioService,
           isPlaying: isPlaying,
-          // No fallback - siempre mostrar la canción actual del AudioService
+          // No hay fallback - siempre mostrar la canción actual del AudioService
         );
       },
     );

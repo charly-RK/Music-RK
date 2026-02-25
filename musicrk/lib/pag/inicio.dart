@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'side/drawer_menu.dart'; 
@@ -16,6 +17,7 @@ import 'all_songs.dart';
 import '../widgets/song_options_sheet.dart';
 import '../widgets/song_tile.dart';
 import 'notificaciones.dart';
+import 'artist.dart';
 
 class Inicio extends StatefulWidget {
   final VoidCallback? onSearchTap;
@@ -48,6 +50,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
   List<Map<String, dynamic>> _featuredAlbums = [];
   bool _permissionGranted = false;
   bool _isLoading = true;
+  bool _showAllArtists = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -64,7 +67,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _initializeApp() async {
-    // Request permissions
+    // Permiso de almacenamiento
     final granted = await _permissionService.requestStoragePermission();
     
     if (mounted) {
@@ -73,15 +76,48 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
       });
     }
 
-    // Load featured albums
+    // Cargar álbumes destacados
     await _loadFeaturedAlbums();
 
-    // Load artists
+    // Cargar artistas
     try {
-      final artists = await _audioQuery.queryArtists(
+      final initialArtists = await _audioQuery.queryArtists(
         sortType: ArtistSortType.NUM_OF_TRACKS,
         orderType: OrderType.DESC_OR_GREATER,
       );
+
+      // Deduplicate artists focusing on main artist name
+      Map<String, ArtistModel> groupedArtists = {};
+      
+      for (var artist in initialArtists) {
+        String rawName = artist.artist;
+        String mainName = rawName.split(RegExp(r'\s*(feat\.?|ft\.?|,|&|\+)\s*', caseSensitive: false)).first.trim();
+        
+        if (mainName.isEmpty || mainName == '<unknown>') {
+            mainName = 'Desconocido';
+        }
+
+        String key = mainName.toLowerCase();
+
+        if (groupedArtists.containsKey(key)) {
+            ArtistModel existing = groupedArtists[key]!;
+            Map<String, dynamic> mergedData = Map<String, dynamic>.from(existing.getMap);
+            mergedData['_id'] = existing.id; 
+            mergedData['artist'] = existing.artist; 
+            mergedData['number_of_tracks'] = (existing.numberOfTracks ?? 0) + (artist.numberOfTracks ?? 0);
+            mergedData['number_of_albums'] = (existing.numberOfAlbums ?? 0) + (artist.numberOfAlbums ?? 0);
+            
+            groupedArtists[key] = ArtistModel(mergedData);
+        } else {
+            Map<String, dynamic> newData = Map<String, dynamic>.from(artist.getMap);
+            newData['artist'] = mainName;
+            groupedArtists[key] = ArtistModel(newData);
+        }
+      }
+
+      final List<ArtistModel> artists = groupedArtists.values.toList();
+      artists.sort((a, b) => (b.numberOfTracks ?? 0).compareTo(a.numberOfTracks ?? 0));
+
       if (mounted) {
         setState(() {
           _artists = artists;
@@ -92,7 +128,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
     }
 
     if (granted) {
-      // Load songs sorted by date added (newest first)
+      // Cargar canciones ordenadas por fecha de adicion (mas recientes primero)
       final songs = await _audioService.querySongs(
         sortType: SongSortType.DATE_ADDED,
         orderType: OrderType.DESC_OR_GREATER,
@@ -106,7 +142,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
         });
       }
 
-      // Listen to audio service state
+      // Escuchar estado del servicio de audio
       _audioService.playingStream.listen((playing) {
         if (mounted) {
           setState(() {
@@ -131,7 +167,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
       }
     }
 
-    // Listen for album changes
+    // Escuchar cambios en álbumes
     DatabaseHelper.instance.albumsStream.listen((_) {
       _loadFeaturedAlbums();
     });
@@ -143,17 +179,17 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
       
       if (albums.isEmpty || !mounted) return;
       
-      // Create mutable copies and get song count for each album
+      // Crear copias mutables y obtener la cantidad de canciones para cada álbum
       final albumsWithCount = <Map<String, dynamic>>[];
       
       for (var album in albums.take(2)) {
-        // Create a mutable copy of the album map
+        // Crear una copia mutable del mapa del álbum
         final albumCopy = Map<String, dynamic>.from(album);
         
         int songCount = 0;
         
         if (album['type'] == 'folder') {
-          // For folder albums, query songs from filesystem
+          // Para álbumes de carpeta, consultar canciones del sistema de archivos
           final folderPath = album['folder_path'] as String;
           final allSongs = await _audioQuery.querySongs(
             sortType: SongSortType.TITLE,
@@ -162,7 +198,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
           );
           songCount = allSongs.where((song) => song.data.startsWith(folderPath)).length;
         } else {
-          // For custom albums, get songs from database
+          // Para álbumes personalizados, obtener canciones de la base de datos
           final songPaths = await DatabaseHelper.instance.getAlbumSongs(album['id']);
           songCount = songPaths.length;
         }
@@ -180,7 +216,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
   }
 
   void _playRecentSong(SongModel song) {
-    // Set playlist to recent songs if not already
+    // Establecer la lista de reproducción a las canciones recientes si no lo está
     if (_audioService.playlistContext != 'recent_songs') {
       _audioService.setPlaylist(_recentSongs);
       _audioService.setPlaylistContext('recent_songs');
@@ -207,10 +243,10 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
   }
 
   void selectSong(int index) {
-    // Get the actual song from the filtered list
+    // Obtener la canción real de la lista filtrada
     final selectedSong = _filteredSongs[index];
     
-    // Find the index in the main list (which AudioService uses)
+    // Encontrar el índice en la lista principal (que AudioService usa)
     final realIndex = _audioService.songs.indexWhere((s) => s.id == selectedSong.id);
     
     if (realIndex == -1) return;
@@ -361,15 +397,18 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
                               
                               return Stack(
                                 children: [
-                                  IconButton(
-                                    key: const ValueKey('notification_icon_button'),
-                                    icon: const Icon(Icons.notifications_none, color: Colors.white),
-                                    onPressed: () {
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(builder: (_) => const NotificacionesPage()),
                                       );
                                     },
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: const Icon(Icons.notifications_none, color: Colors.white, size: 28),
+                                    ),
                                   ),
                                   if (unreadCount > 0)
                                     Positioned(
@@ -412,9 +451,11 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
                       color: Colors.white,
                       borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
                     ),
-                    child: RefreshIndicator(
-                      onRefresh: _initializeApp,
-                      color: const Color(0xFFE91E63),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                      child: RefreshIndicator(
+                        onRefresh: _initializeApp,
+                        color: const Color(0xFFE91E63),
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.only(top: 20, bottom: 100),
                         child: Column(
@@ -456,32 +497,40 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            // Horizontal Song List
-                            SizedBox(
-                              height: 180,
-                              child: ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _recentSongs.length,
-                                separatorBuilder: (_, __) => const SizedBox(width: 16),
-                                itemBuilder: (context, index) {
-                                  return RepaintBoundary(
-                                    child: _buildHorizontalSongCard(_recentSongs[index], index),
-                                  );
-                                },
-                              ),
+                            // Lista vertical de canciones
+                            ListView.builder(
+                              padding: EdgeInsets.zero,
+                              physics: const NeverScrollableScrollPhysics(),
+                              shrinkWrap: true,
+                              itemCount: _recentSongs.length > 5 ? 5 : _recentSongs.length,
+                              itemBuilder: (context, index) {
+                                final song = _recentSongs[index];
+                                final isCurrent = _audioService.currentSong?.id == song.id;
+                                return RepaintBoundary(
+                                  child: SongTile(
+                                    song: song,
+                                    audioService: _audioService,
+                                    isCurrentSong: isCurrent,
+                                    onTap: () => _playRecentSong(song),
+                                    onPlayTap: () => _playRecentSong(song),
+                                    onLongPress: () => _showSongOptions(song),
+                                    onOptionTap: () => _showSongOptions(song),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
                       ),
                     ),
                   ),
+                  ),
                 ),
               ],
             ),
           ),
           
-          // Bottom Player positioned at the bottom
+          // Bottom Player posicionado al final
           Positioned(
             bottom: 0,
             left: 0,
@@ -515,7 +564,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
     return _buildAlbumCard(context, {
       'name': title,
       'artist': artist,
-      'image_path': "https://picsum.photos/seed/$id/400",
+      'image_path': null,
       'type': 'custom',
       'songs': [],
       'song_count': 0,
@@ -523,9 +572,8 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildAlbumCard(BuildContext context, Map<String, dynamic> album) {
-    String name = album['name'];
+    String name = album['name'] ?? 'Desconocido';
     int songCount = album['song_count'] ?? 0;
-    String imageUrl = album['image_path'] ?? "https://picsum.photos/seed/${album['id'] ?? name.hashCode}/400";
 
     return GestureDetector(
       onTap: () {
@@ -535,22 +583,30 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
+            child: Container(
               height: 150,
               width: double.infinity,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey[900],
-                    child: const Icon(Icons.album, color: Colors.white24, size: 40),
-                  );
-                },
+              child: Stack(
+                fit: StackFit.expand,
+                alignment: Alignment.center,
+                children: [
+                  // Imagen de fondo con ajuste para rellenar
+                  Image.asset(
+                    'assets/imagenes/carpeta_2.jpg',
+                    fit: BoxFit.cover,
+                  ),
+                  // Filtro de desenfoque de fondo estilo Premium
+                  Positioned.fill(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 1.0, sigmaY: 1.0),
+                      child: Container(color: Colors.black.withOpacity(0.15)),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          // Gradient overlay for text visibility
+          // Gradiente inferior para la visibilidad del texto
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -560,14 +616,14 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.8),
                   ],
-                  stops: const [0.5, 1.0],
+                  stops: const [0.4, 1.0],
                 ),
               ),
             ),
           ),
-          // Album name and song count
+          // Nombre del álbum y cantidad de canciones
           Positioned(
             bottom: 8,
             left: 8,
@@ -596,7 +652,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
               ],
             ),
           ),
-          // Play button
+          // Botón de reproducción
           Positioned(
             bottom: 8,
             right: 8,
@@ -656,7 +712,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
           label: "Historial",
           color: const Color(0xFFFF9800),
           onTap: () {
-             // TODO: Implement History Page
+             // TODO: HISTORIAL
              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Próximamente")));
           },
         ),
@@ -695,132 +751,115 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
       );
     }
 
+    final showSeeAllBtn = _artists.length > 10 && !_showAllArtists;
+    final displayCount = showSeeAllBtn ? 10 : _artists.length;
+    final totalCount = showSeeAllBtn ? 11 : displayCount;
+
     return SizedBox(
       height: 110,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: _artists.length,
+        itemCount: totalCount,
         separatorBuilder: (_, __) => const SizedBox(width: 16),
         itemBuilder: (context, index) {
-          final artist = _artists[index];
-          return RepaintBoundary(
-            child: Column(
-              children: [
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.grey[200],
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+          if (showSeeAllBtn && index == 10) {
+            // Botón de "Ver todos"
+            return RepaintBoundary(
+              child: GestureDetector(
+                onTap: () {
+                   setState(() {
+                     _showAllArtists = true;
+                   });
+                },
+                child: Column(
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: const Color(0xFFE91E63).withOpacity(0.5), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFE91E63).withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: ClipOval(
-                    child: QueryArtworkWidget(
-                      id: artist.id,
-                      type: ArtworkType.ARTIST,
-                      artworkFit: BoxFit.cover,
-                      size: 200,
-                      quality: 80,
-                      nullArtworkWidget: Icon(Icons.person, size: 35, color: Colors.grey[400]),
+                      child: const Center(
+                        child: Icon(Icons.add, size: 30, color: Color(0xFFE91E63)),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    artist.artist,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildHorizontalSongCard(SongModel song, int index) {
-    return GestureDetector(
-      onTap: () => _playRecentSong(song),
-      onLongPress: () => _showSongOptions(song),
-      child: Container(
-        width: 140,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: QueryArtworkWidget(
-                  id: song.id,
-                  type: ArtworkType.AUDIO,
-                  artworkWidth: double.infinity,
-                  artworkHeight: double.infinity,
-                  artworkFit: BoxFit.cover,
-                  size: 300, // Optimized size
-                  quality: 80,
-                  nullArtworkWidget: Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: Icon(Icons.music_note, size: 40, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    const SizedBox(
+                      width: 80,
+                      child: Text(
+                        "Ver más",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFE91E63)),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10.0),
+            );
+          }
+
+          final artist = _artists[index];
+          return RepaintBoundary(
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ArtistPage(artist: artist)),
+                );
+              },
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    song.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.black87,
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey[200],
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    child: ClipOval(
+                      child: QueryArtworkWidget(
+                        id: artist.id,
+                        type: ArtworkType.ARTIST,
+                        artworkFit: BoxFit.cover,
+                        size: 200,
+                        quality: 80,
+                        nullArtworkWidget: Icon(Icons.person, size: 35, color: Colors.grey[400]),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    song.artist ?? "Desconocido",
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 11,
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: 80,
+                    child: Text(
+                      artist.artist,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -846,7 +885,7 @@ class _InicioState extends State<Inicio> with AutomaticKeepAliveClientMixin {
       builder: (context) => SongOptionsSheet(
         song: song,
         onPlay: () {
-          // Find index in filtered list
+          // Encontrar el índice en la lista filtrada
           final index = _filteredSongs.indexOf(song);
           if (index != -1) selectSong(index);
         },
@@ -882,7 +921,7 @@ class _BottomPlayerArtState extends State<BottomPlayerArt> {
         artworkQuality: FilterQuality.low,
         keepOldArtwork: true,
         artworkFit: BoxFit.cover,
-        size: 100, // Optimized size
+        size: 100, 
         nullArtworkWidget: Container(
           width: 52,
           height: 52,

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/database_helper.dart';
@@ -17,7 +19,11 @@ class LibraryPage extends StatefulWidget {
 
 class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   List<Map<String, dynamic>> _libraries = [];
+  List<Map<String, dynamic>> _filteredLibraries = [];
   bool _isLoading = true;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
 
   @override
   bool get wantKeepAlive => true;
@@ -31,8 +37,33 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
   
   @override
   void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _filterLibraries(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (query.isEmpty) {
+        setState(() {
+          _filteredLibraries = List.from(_libraries);
+        });
+        return;
+      }
+
+      final lowerQuery = query.toLowerCase();
+      final filtered = _libraries.where((lib) {
+        final name = (lib['name'] ?? '').toString().toLowerCase();
+        return name.contains(lowerQuery);
+      }).toList();
+
+      setState(() {
+        _filteredLibraries = filtered;
+      });
+    });
   }
   
   @override
@@ -49,6 +80,11 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
       final data = await DatabaseHelper.instance.getAllAlbums();
       setState(() {
         _libraries = data;
+        if (_isSearching && _searchController.text.isNotEmpty) {
+          _filterLibraries(_searchController.text);
+        } else {
+          _filteredLibraries = data;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -126,26 +162,7 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        centerTitle: true,
-        title: const Text(
-          'Tu Biblioteca',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      resizeToAvoidBottomInset: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -158,37 +175,119 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE91E63)))
-                : RefreshIndicator(
-                    onRefresh: _refreshLibraries,
-                    color: const Color(0xFFE91E63),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(right: 12),
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                        onPressed: widget.onBackTap ?? () => Navigator.pop(context),
+                      ),
+                    ),
+                    Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _isSearching
+                              ? TextField(
+                                  key: const ValueKey('search_field'),
+                                  controller: _searchController,
+                                  autofocus: true,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  decoration: const InputDecoration(
+                                    hintText: "Buscar biblioteca...",
+                                    hintStyle: TextStyle(color: Colors.white54),
+                                    border: InputBorder.none,
+                                  ),
+                                  onChanged: _filterLibraries,
+                                )
+                              : const Text(
+                                  'Tu Biblioteca',
+                                  key: ValueKey('title_text'),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20, // Reducido de 24 a 20
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                        ),
+                    ),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          _isSearching ? Icons.close_rounded : Icons.search_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            if (_isSearching) {
+                              _isSearching = false;
+                              _searchController.clear();
+                              _filterLibraries("");
+                            } else {
+                              _isSearching = true;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator(color: Color(0xFFE91E63)))
+                      : RefreshIndicator(
+                          onRefresh: _refreshLibraries,
+                          color: const Color(0xFFE91E63),
                     child: GridView.builder(
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        childAspectRatio: 0.85,
+                        childAspectRatio: 1.3, // Reducido verticalmente 
                       ),
-                      itemCount: _libraries.length + 1,
+                      itemCount: _filteredLibraries.length + 1,
                       itemBuilder: (context, index) {
                         if (index == 0) {
                           return _buildAddLibraryCard(context);
                         }
-                        final lib = _libraries[index - 1];
-                        // For now, mock song count or fetch it
-                        int songCount = 0; // TODO: Fetch actual count
-                        String image = lib['image_path'] ?? 'https://picsum.photos/400';
+                        final lib = _filteredLibraries[index - 1];
+                        // Por ahora, simula el recuento de canciones o búscala
+                        int songCount = 0; // TODO: Buscar el recuento real
+                        // String image = lib['image_path'] ?? 'assets/imagenes/carpeta_2.jpg';
                         if (lib['type'] == 'folder') {
-                           // Use a folder icon or specific image for folders if needed
+                           // Utilice un icono de carpeta o una imagen específica para las carpetas si es necesario
                         }
 
                         return _buildLibraryCard(context, lib);
                       },
                     ),
                   ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -551,8 +650,7 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
 
   Widget _buildLibraryCard(BuildContext context, Map<String, dynamic> album) {
     String name = album['name'];
-    // int songs = album['songs'] ?? 0; // We might not have this yet
-    String imageUrl = album['image_path'] ?? 'https://picsum.photos/400';
+    String? dbImagePath = album['image_path']; 
     
     return Container(
       decoration: BoxDecoration(
@@ -591,17 +689,24 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
           },
           child: Stack(
             children: [
-            // Background Image
+            // Imagen de fondo
             Positioned.fill(
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                   return Container(color: Colors.grey[900], child: const Icon(Icons.album, color: Colors.white24, size: 50));
-                },
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
+                child: dbImagePath != null && dbImagePath.startsWith('http')
+                    ? Image.network(
+                        dbImagePath,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                      )
+                    : Image.asset(
+                        'assets/imagenes/carpeta_1.jpg',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                      ),
               ),
             ),
-            // Gradient Overlay
+            // Overlay degradado
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -617,26 +722,28 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
                 ),
               ),
             ),
-            // Text Content
+            // Contenido de texto
             Positioned(
-              bottom: 14,
+              bottom: 16,
               left: 14,
-              right: 14,
+              right: 48, // Padding derecho grande para no chocar con el botón de play
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min, // Para que la columna no ocupe más de lo necesario
                 children: [
                   Text(
                     name,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                      fontSize: 14, // Ligeramente más pequeño para acomodar 2 líneas
+                      height: 1.2, // Interlineado ajustado
                     ),
-                    maxLines: 1,
+                    maxLines: 2, // Permitir 2 líneas para nombres largos
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  // We can show "Folder" or "Album" if song count is unknown
+                  // Mostramos "Carpeta" o "Álbum" si el recuento de canciones es desconocido
                   Text(
                     album['type'] == 'folder' ? 'Carpeta' : 'Álbum',
                     style: TextStyle(
@@ -647,7 +754,7 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
                 ],
               ),
             ),
-            // Play Button Overlay
+            // Botón de reproducción
             Positioned(
               bottom: 14,
               right: 14,
@@ -677,4 +784,12 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
       ),
     );
   }
+
+  Widget _buildFallbackImage() {
+    return Container(
+      color: Colors.grey[900],
+      child: const Icon(Icons.folder_shared_rounded, color: Colors.white24, size: 50),
+    );
+  }
 }
+

@@ -95,14 +95,14 @@ class _CustomDrawerState extends State<CustomDrawer> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        /* Text(
                           "Buenos Días,",
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.6),
                             fontSize: 12,
                             fontWeight: FontWeight.w400,
                           ),
-                        ),
+                        ), */
                         const SizedBox(height: 4),
                         const Text(
                           "MusicRK Player",

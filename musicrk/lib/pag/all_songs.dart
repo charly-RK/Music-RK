@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
@@ -28,7 +29,8 @@ class _AllSongsPageState extends State<AllSongsPage> {
   StreamSubscription? _currentSongSubscription;
   StreamSubscription? _playingSubscription;
   Timer? _debounce;
-  String _sortOrder = 'title'; // title, date, artist
+  String _sortOrder = 'album'; // 'titulo', 'album', 'artista'
+  OverlayEntry? _overlayEntry;
   int _displayedCount = 100;
   final int _incrementCount = 100;
 
@@ -55,24 +57,28 @@ class _AllSongsPageState extends State<AllSongsPage> {
     _currentSongSubscription?.cancel();
     _playingSubscription?.cancel();
     _debounce?.cancel();
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
     super.dispose();
   }
 
   Future<void> _loadSongs() async {
     setState(() => _isLoading = true);
     
-    // Use cached songs if available, otherwise query
+    // usar canciones cacheadas si están disponibles, si no, consultar
     if (_audioService.songs.isEmpty) {
       await _audioService.querySongs(updateList: true);
     }
     
     if (mounted) {
       setState(() {
-        // Create a copy to avoid modifying the global list by reference
+        // Crear una copia para evitar modificar la lista global por referencia
         _allSongs = List.from(_audioService.songs);
         _filteredSongs = List.from(_allSongs);
-        _applySorting(); // Apply saved sort order
-        _displayedCount = 100; // Reset pagination
+        _applySorting(); // Aplicar orden de clasificación guardado
+        _displayedCount = 100; // Resetear paginación
         _isLoading = false;
       });
     }
@@ -97,12 +103,12 @@ class _AllSongsPageState extends State<AllSongsPage> {
       _filteredSongs.sort((a, b) {
         return (a.artist ?? "").toLowerCase().compareTo((b.artist ?? "").toLowerCase());
       });
-    } else if (_sortOrder == 'date') {
+    } else if (_sortOrder == 'album') {
       _filteredSongs.sort((a, b) {
-        return (b.dateAdded ?? 0).compareTo(a.dateAdded ?? 0);
+        return (a.album ?? "").toLowerCase().compareTo((b.album ?? "").toLowerCase());
       });
     } else {
-      // Title order
+      // orden por título
       _filteredSongs.sort((a, b) {
         return a.title.toLowerCase().compareTo(b.title.toLowerCase());
       });
@@ -116,24 +122,49 @@ class _AllSongsPageState extends State<AllSongsPage> {
       if (query.isEmpty) {
         setState(() {
           _filteredSongs = List.from(_allSongs);
-          _applySorting(); // Re-apply sort order
-          _displayedCount = 100; // Reset pagination
+          _applySorting(); // reaplicar orden de clasificación
+          _displayedCount = 100; // Resetear paginación
         });
         return;
       }
 
-      final lowerQuery = query.toLowerCase();
-      // Optimize: Use a local list for filtering to avoid multiple state updates if we were doing intermediate steps
+      String normalize(String input) {
+        return input
+            .toLowerCase()
+            .replaceAll(RegExp(r'[áàâä]'), 'a')
+            .replaceAll(RegExp(r'[éèêë]'), 'e')
+            .replaceAll(RegExp(r'[íìîï]'), 'i')
+            .replaceAll(RegExp(r'[óòôö]'), 'o')
+            .replaceAll(RegExp(r'[úùûü]'), 'u')
+            .replaceAll(RegExp(r'[ñ]'), 'n');
+      }
+
+      final normalizedQuery = normalize(query);
+      
+      // Optimizar: usar una lista local para filtrar y evitar múltiples actualizaciones de estado si estuviéramos realizando pasos intermedios
       final filtered = _allSongs.where((song) {
-        return song.title.toLowerCase().contains(lowerQuery) ||
-               (song.artist?.toLowerCase().contains(lowerQuery) ?? false) ||
-               (song.album?.toLowerCase().contains(lowerQuery) ?? false);
+        return normalize(song.title).contains(normalizedQuery) ||
+               normalize(song.artist ?? "").contains(normalizedQuery) ||
+               normalize(song.album ?? "").contains(normalizedQuery);
       }).toList();
 
+      // Deduplicar canciones por título para evitar mostrar la misma canción varias veces
+      final Set<String> seenTitles = {};
+      final List<SongModel> uniqueFiltered = [];
+      
+      for (var song in filtered) {
+        // Normalizamos el título (minúsculas y sin espacios extra) para la comparación
+        final normalizedTitle = song.title.toLowerCase().trim();
+        if (!seenTitles.contains(normalizedTitle)) {
+          seenTitles.add(normalizedTitle);
+          uniqueFiltered.add(song);
+        }
+      }
+
       setState(() {
-        _filteredSongs = filtered;
-        _applySorting(); // Re-apply sort order to search results
-        _displayedCount = 100; // Reset pagination
+        _filteredSongs = uniqueFiltered;
+        _applySorting(); // reaplicar orden de clasificación a los resultados de la búsqueda
+        _displayedCount = 100; // Resetear paginación
       });
     });
   }
@@ -141,8 +172,8 @@ class _AllSongsPageState extends State<AllSongsPage> {
   void _cycleSortOrder() {
     setState(() {
       if (_sortOrder == 'title') {
-        _sortOrder = 'date';
-      } else if (_sortOrder == 'date') {
+        _sortOrder = 'album';
+      } else if (_sortOrder == 'album') {
         _sortOrder = 'artist';
       } else {
         _sortOrder = 'title';
@@ -151,32 +182,88 @@ class _AllSongsPageState extends State<AllSongsPage> {
     });
     _saveSortOrder();
     
-    // Update the active playlist in AudioService to match the new sort order
+    // Actualizar la lista de reproducción activa en AudioService para que coincida con el nuevo orden de clasificación
     if (_audioService.currentSong != null && _audioService.playlistContext == 'all_songs') {
       _audioService.setPlaylist(_filteredSongs);
     }
     
     String message = _sortOrder == 'title' 
-        ? 'Ordenado por Título' 
-        : _sortOrder == 'date' 
-            ? 'Ordenado por Fecha' 
-            : 'Ordenado por Artista';
+        ? 'Título' 
+        : _sortOrder == 'album' 
+            ? 'Álbum' 
+            : 'Artista';
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF1A1F3D),
+    _showCustomToast(message, _sortOrder);
+  }
+
+  void _showCustomToast(String message, String iconType) {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
+
+    IconData sortIcon = Icons.sort_by_alpha_rounded;
+    if (iconType == 'album') sortIcon = Icons.album_rounded;
+    if (iconType == 'artist') sortIcon = Icons.person_rounded;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).size.height / 2 - 25,
+        left: 0,
+        right: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.25), // Más transparente
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(sortIcon, color: const Color(0xFFE91E63), size: 18), // Icono más pequeño
+                      const SizedBox(width: 8),
+                      Text(
+                        message,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5, // Texto más pequeño
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
+
+    Overlay.of(context).insert(_overlayEntry!);
+
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (_overlayEntry != null && mounted) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      }
+    });
   }
 
   void _playSong(int index, {bool shuffle = false}) {
-    // Set the current filtered/sorted list as the active playlist
+    // Establecer la lista filtrada/ordenada actual como la lista de reproducción activa
     _audioService.setPlaylist(_filteredSongs);
     _audioService.setPlaylistContext('all_songs');
 
-    // Find the global index of the song to play it correctly via AudioService
+    // Encontrar el índice global de la canción para reproducirla correctamente a través de AudioService
     final selectedSong = _filteredSongs[index];
     final globalIndex = _audioService.songs.indexWhere((s) => s.id == selectedSong.id);
     
@@ -211,8 +298,8 @@ class _AllSongsPageState extends State<AllSongsPage> {
           final index = _filteredSongs.indexOf(song);
           if (index != -1) _playSong(index);
         },
-        // onAddToFavorites: uses default logic
-        // onInfo: uses default logic
+        // onAddToFavorites: usa la lógica predeterminada
+        // onInfo: usa la lógica predeterminada
       ),
     );
   }
@@ -223,7 +310,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
       backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
-          // Custom App Bar Background
+          // Fondo personalizado de la barra de aplicaciones
           Container(
             height: 160,
             decoration: const BoxDecoration(
@@ -242,16 +329,25 @@ class _AllSongsPageState extends State<AllSongsPage> {
           SafeArea(
             child: Column(
               children: [
-                // Header
+                // Encabezado
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 24),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                       ),
-                      const SizedBox(width: 4),
                       Expanded(
                         child: _isSearching
                             ? TextField(
@@ -266,40 +362,59 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                 onChanged: _filterSongs,
                               )
                             : const Text(
-                                "Todas las canciones",
+                                "Canciones",
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w800,
                                   letterSpacing: 0.5,
                                 ),
                               ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          _isSearching ? Icons.close : Icons.search,
-                          color: Colors.white,
-                          size: 26,
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            if (_isSearching) {
-                              _isSearching = false;
-                              _searchController.clear();
-                              _filterSongs("");
-                            } else {
-                              _isSearching = true;
-                            }
-                          });
-                        },
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            _isSearching ? Icons.close_rounded : Icons.search_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              if (_isSearching) {
+                                _isSearching = false;
+                                _searchController.clear();
+                                _filterSongs("");
+                              } else {
+                                _isSearching = true;
+                              }
+                            });
+                          },
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.sort_rounded,
-                          color: Colors.white,
-                          size: 26,
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
                         ),
-                        onPressed: _cycleSortOrder,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.tune_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: _cycleSortOrder,
+                        ),
                       ),
                     ],
                   ),
@@ -307,10 +422,9 @@ class _AllSongsPageState extends State<AllSongsPage> {
 
 
 
-                // Song List
+                // Lista de canciones
                 Expanded(
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
@@ -398,7 +512,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
             ),
           ),
           
-          // Bottom Player
+          // Reproductor inferior
           Positioned(
             bottom: 0,
             left: 0,
@@ -424,128 +538,92 @@ class _AllSongsPageState extends State<AllSongsPage> {
     bool isPlaying = _audioService.player.playing;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2), // Margen reducido como en inicio
       decoration: BoxDecoration(
-        color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(15),
+        color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.05) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _playSong(index),
-          borderRadius: BorderRadius.circular(15),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Song Number
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    '${index + 1}',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[600],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Artwork
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey[200],
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 5,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        QueryArtworkWidget(
-                          id: song.id,
-                          type: ArtworkType.AUDIO,
-                          artworkFit: BoxFit.cover,
-                          artworkWidth: 50,
-                          artworkHeight: 50,
-                          artworkQuality: FilterQuality.low,
-                          keepOldArtwork: true,
-                          size: 100, // Optimized size
-                          nullArtworkWidget: const Icon(Icons.music_note_rounded, color: Colors.grey),
-                        ),
-                        if (isCurrentSong && isPlaying)
-                          Container(
-                            color: Colors.black.withOpacity(0.4),
-                            child: const Center(
-                              child: Icon(Icons.equalizer_rounded, color: Colors.white, size: 20),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        song.title,
-                        style: TextStyle(
-                          fontWeight: isCurrentSong ? FontWeight.bold : FontWeight.w600,
-                          fontSize: 15,
-                          color: isCurrentSong ? const Color(0xFFE91E63) : const Color(0xFF1A1F3D),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        song.artist ?? "Desconocido",
-                        style: TextStyle(
-                          color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.8) : Colors.grey[600],
-                          fontSize: 13,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Duration
-                Text(
-                  "${(song.duration ?? 0) ~/ 60000}:${((song.duration ?? 0) ~/ 1000 % 60).toString().padLeft(2, '0')}",
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[500],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Menu Button
-                IconButton(
-                  icon: Icon(Icons.more_vert_rounded, 
-                    color: isCurrentSong ? const Color(0xFFE91E63) : Colors.grey[400],
-                    size: 22
-                  ),
-                  onPressed: () => _showSongOptions(song),
-                ),
-              ],
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: QueryArtworkWidget(
+            id: song.id,
+            type: ArtworkType.AUDIO,
+            artworkWidth: 45,
+            artworkHeight: 45,
+            artworkQuality: FilterQuality.low,
+            keepOldArtwork: true,
+            size: 100, // Tamaño optimizado
+            nullArtworkWidget: Container(
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.music_note, color: Colors.grey[400]),
             ),
           ),
         ),
+        title: Text(
+          song.title,
+          style: TextStyle(
+            fontSize: 15, 
+            fontWeight: isCurrentSong ? FontWeight.bold : FontWeight.w600,
+            color: isCurrentSong ? const Color(0xFFE91E63) : const Color(0xFF2C3E50),
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  song.artist ?? "Desconocido",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCurrentSong ? const Color(0xFFE91E63).withOpacity(0.7) : Colors.grey[600],
+                    fontWeight: FontWeight.w400,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "${(song.duration ?? 0) ~/ 60000}:${((song.duration ?? 0) ~/ 1000 % 60).toString().padLeft(2, '0')}",
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isCurrentSong)
+              const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Icon(Icons.graphic_eq, color: Color(0xFFE91E63), size: 20),
+              ),
+            IconButton(
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
+              onPressed: () => _showSongOptions(song),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              iconSize: 20,
+            ),
+          ],
+        ),
+        onTap: () => _playSong(index),
+        onLongPress: () => _showSongOptions(song),
       ),
     );
   }
