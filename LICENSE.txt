@@ -1,0 +1,17 @@
+TÉRMINOS DE LICENCIA Y CONDICIONES DE USO (USO NO COMERCIAL / NO PRODUCTIVO)
+-------------------------------------------------------------------------
+
+PROYECTO: MusicRK
+DESARROLLADO POR: Risk-Keep
+
+Por la presente se autoriza a cualquier persona que obtenga una copia de este software y los archivos de documentación asociados (el "Software") a utilizar el código fuente para fines exclusivamente de aprendizaje, evaluación y ejecución en entornos de desarrollo local (personal o educativo).
+
+Bajo esta licencia, quedan expresamente PROHIBIDAS las siguientes acciones:
+
+1. El uso del Software para cualquier fin comercial, de lucro, o venta de servicios directa o indirectamente.
+2. El despliegue del Software en entornos de producción pública o comercial.
+3. La redistribución, publicación en tiendas de aplicaciones oficiales (como Google Play Store o Apple App Store), sublicenciamiento o venta de copias compiladas o del código fuente sin el consentimiento expreso y por escrito del autor original (Risk-Keep).
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUYENDO PERO NO LIMITADO A GARANTÍAS DE COMERCIABILIDAD, ADECUACIÓN PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES O PROPIETARIOS DE LOS DERECHOS DE AUTOR SERÁN RESPONSABLES DE NINGUNA RECLAMACIÓN, DAÑOS U OTRAS RESPONSABILIDADES, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O DE OTRO MODO, QUE SURJA DE, FUERA DE O EN CONEXIÓN CON EL SOFTWARE O EL USO U OTROS ACUERDOS EN EL SOFTWARE.
+
+Para cualquier consulta o solicitud de permisos especiales, por favor contactar directamente con Risk-Keep.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/audio_service.dart';
+import '../widgets/custom_dialogs.dart';
 
 class ConfigPage extends StatefulWidget {
   const ConfigPage({super.key});
@@ -65,9 +66,7 @@ class _ConfigPageState extends State<ConfigPage> {
         await AudioService().reloadLibrary();
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Esta carpeta ya está en la lista')),
-          );
+          AppDialogs.showToast(context, 'Esta carpeta ya está en la lista');
         }
       }
     }

@@ -40,7 +40,7 @@ class _SongTileState extends State<SongTile> {
     final isSelected = widget.isCurrentSong;
     
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2), // Reduced vertical margin
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       decoration: BoxDecoration(
         color: isSelected ? theme.colorScheme.primary.withOpacity(0.05) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
@@ -57,7 +57,7 @@ class _SongTileState extends State<SongTile> {
             artworkHeight: 45,
             artworkQuality: FilterQuality.low,
             keepOldArtwork: true,
-            size: 100, // Optimized size
+            size: 100,
             nullArtworkWidget: Container(
               width: 45,
               height: 45,

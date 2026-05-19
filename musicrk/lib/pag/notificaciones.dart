@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
+import '../widgets/custom_dialogs.dart';
 
 class NotificacionesPage extends StatefulWidget {
   const NotificacionesPage({super.key});
@@ -255,13 +256,7 @@ class _NotificacionesPageState extends State<NotificacionesPage> {
       ),
       onDismissed: (direction) {
         _eliminarNotificacion(index);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Notificación eliminada'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Color(0xFF1A1F3D),
-          ),
-        );
+        AppDialogs.showToast(context, 'Notificación eliminada');
       },
       child: Material(
         color: leida ? Colors.white : const Color(0xFFE91E63).withOpacity(0.05),

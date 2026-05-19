@@ -11,9 +11,9 @@ AudioPlayerHandler? _audioHandler;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Solicitar permisos de notificación al iniciar
+  // Solicitar permisos importantes al iniciar (Notificaciones y Almacenamiento)
   final permissionService = PermissionService();
-  await permissionService.requestNotificationPermission();
+  await permissionService.requestInitialPermissions();
   
   // Inicializar el servicio de audio en segundo plano
   try {

@@ -1,28 +1,27 @@
-# Usar la imagen de Python 3.11 slim
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-# Instalar dependencias del sistema incluyendo FFmpeg
+# Install system dependencies: ffmpeg, tor, curl, and procps
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    tor \
+    curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Establecer el directorio de trabajo
+# Set working directory
 WORKDIR /app
 
-# Copiar primero el archivo de requerimientos para un mejor aprovechamiento de la caché
+# Copy requirements and install dependencies
 COPY requirements.txt .
-
-# Instalar las dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código de la aplicación
+# Copy application files
 COPY . .
 
-# Crear el directorio de descargas
-RUN mkdir -p downloads
+# Expose default port
+EXPOSE 5001
 
-# Exponer el puerto (Railway sobrescribirá esto con la variable $PORT)
-EXPOSE 8000
+# Copy start script, set permissions, and define entrypoint
+RUN chmod +x start.sh
 
-# Ejecutar la aplicación
-CMD ["sh", "-c", "gunicorn server:app --bind 0.0.0.0:${PORT:-8000} --timeout 300 --workers 2"]
+CMD ["./start.sh"]

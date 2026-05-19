@@ -7,6 +7,7 @@ import 'inicio.dart';
 import '../widgets/bottom_player.dart';
 import '../widgets/song_options_sheet.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/custom_dialogs.dart';
 
 class FavoritosPage extends StatefulWidget {
   const FavoritosPage({super.key});
@@ -448,6 +449,7 @@ class _FavoritosPageState extends State<FavoritosPage> {
       isScrollControlled: true,
       builder: (context) => SongOptionsSheet(
         song: song,
+        onRefresh: () => _loadFavorites(),
         isFavorite: true,
         onPlay: () {
           final index = _favoriteSongs.indexOf(song);
@@ -497,28 +499,19 @@ class _FavoritosPageState extends State<FavoritosPage> {
   }
 
   void _showSongInfo(SongModel song) {
-    showDialog(
+    AppDialogs.showCustomDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: const Text("Información", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow("Archivo:", song.displayName),
-            _buildInfoRow("Artista:", song.artist ?? "Desconocido"),
-            _buildInfoRow("Álbum:", song.album ?? "Desconocido"),
-            _buildInfoRow("Duración:", _formatDuration(song.duration ?? 0)),
-            _buildInfoRow("Tamaño:", "${(song.size / (1024 * 1024)).toStringAsFixed(2)} MB"),
-            _buildInfoRow("Ruta:", song.data),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cerrar", style: TextStyle(color: Color(0xFFE91E63))),
-          ),
+      title: "Información",
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInfoRow("Archivo:", song.displayName),
+          _buildInfoRow("Artista:", song.artist ?? "Desconocido"),
+          _buildInfoRow("Álbum:", song.album ?? "Desconocido"),
+          _buildInfoRow("Duración:", _formatDuration(song.duration ?? 0)),
+          _buildInfoRow("Tamaño:", "${(song.size / (1024 * 1024)).toStringAsFixed(2)} MB"),
+          _buildInfoRow("Ruta:", song.data),
         ],
       ),
     );

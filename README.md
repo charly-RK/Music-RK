@@ -1,144 +1,112 @@
-# MusicRK 🎵
+# MusicRK
 
-Una aplicación de música moderna y completa para Android, desarrollada con Flutter. Reproduce música local, descarga canciones de YouTube, gestiona playlists y mucho más.
+MusicRK es una aplicación móvil de música desarrollada con **Flutter** e integrada con un backend en **Python (Flask)**. Está diseñada para ofrecer una experiencia avanzada de reproducción multimedia y permitir la búsqueda y descarga directa de música de alta calidad (320kbps MP3) con metadatos y portadas completas.
 
-![Flutter](https://img.shields.io/badge/Flutter-3.8.1-02569B?logo=flutter)
-![Dart](https://img.shields.io/badge/Dart-3.8.1-0175C2?logo=dart)
-![License](https://img.shields.io/badge/License-Private-red)
-
-## ✨ Características
-
-### 🎵 Reproductor de Música
-- Reproducción de música local del dispositivo
-- Notificación de reproducción en segundo plano con controles completos
-- Visualización de carátulas de álbum
-- Control de reproducción: play/pause, siguiente, anterior
-- Barra de progreso interactiva
-- Persistencia del estado de reproducción
-
-### 📚 Gestión de Biblioteca
-- Visualización de todas las canciones
-- Organización por álbumes
-- Gestión de artistas
-- Sistema de favoritos
-- Creación y gestión de playlists personalizadas
-
-### 📥 Descarga de YouTube
-- Búsqueda de canciones en YouTube
-- Descarga de audio en formato MP3 (320kbps)
-- Conversión automática con FFmpeg
-- Integración directa con la biblioteca de música
-
-### 🎨 Interfaz de Usuario
-- Diseño moderno con tema azul y blanco
-- Animaciones fluidas y transiciones suaves
-- Interfaz intuitiva y fácil de usar
-- Soporte para modo oscuro
-
-## 🏗️ Arquitectura del Proyecto
-
-El proyecto está dividido en dos componentes principales:
-
-```
-musicrk_1/
-├── musicrk/          # Aplicación Flutter
-│   ├── lib/
-│   │   ├── config/   # Configuración de la app
-│   │   ├── pag/      # Páginas/Pantallas
-│   │   ├── services/ # Servicios (audio, descargas, etc.)
-│   │   └── widgets/  # Widgets reutilizables
-│   └── assets/       # Recursos (imágenes, etc.)
-│
-└── backend/          # Servidor Python para YouTube
-    ├── server.py     # API Flask
-    └── downloads/    # Archivos descargados
-```
-
-## 🚀 Instalación y Configuración
-
-### Requisitos Previos
-
-- Flutter SDK 3.8.1 o superior
-- Dart SDK 3.8.1 o superior
-- Android Studio / VS Code
-- Python 3.8+ (para el backend)
-- FFmpeg (para conversión de audio)
-
-### 1. Clonar el Repositorio
-
-```bash
-git clone https://github.com/TU_USUARIO/musicrk.git
-cd musicrk
-```
-
-### 2. Configurar la Aplicación Flutter
-
-```bash
-cd musicrk
-flutter pub get
-```
-
-### 3. Configurar el Backend (Opcional - para descargas de YouTube)
-
-```bash
-cd ../backend
-pip install -r requirements.txt
-```
-
-Ver [backend/README.md](backend/README.md) para instrucciones detalladas del backend.
-
-### 4. Ejecutar la Aplicación
-
-```bash
-cd musicrk
-flutter run
-```
-
-## 📱 Permisos Necesarios
-
-La aplicación requiere los siguientes permisos en Android:
-
-- **Almacenamiento**: Para leer archivos de música del dispositivo
-- **Notificaciones**: Para mostrar controles de reproducción
-- **Internet**: Para descargar música de YouTube (opcional)
-
-## 🛠️ Tecnologías Utilizadas
-
-### Frontend (Flutter)
-- **just_audio**: Reproducción de audio
-- **audio_service**: Reproducción en segundo plano
-- **on_audio_query**: Consulta de archivos de música
-- **sqflite**: Base de datos local
-- **shared_preferences**: Almacenamiento de preferencias
-- **flutter_local_notifications**: Notificaciones
-- **http**: Comunicación con el backend
-
-### Backend (Python)
-- **Flask**: Framework web
-- **yt-dlp**: Descarga de videos de YouTube
-- **FFmpeg**: Conversión de audio
-
-## 📖 Documentación Adicional
-
-- [Configuración del Backend](backend/README.md)
-
-
-## 🐛 Problemas Conocidos
-
-- La descarga de YouTube puede fallar ocasionalmente debido a cambios en la API de YouTube
-- Algunos dispositivos pueden requerir permisos adicionales para acceder al almacenamiento
-
-## 🤝 Contribuciones
-
-Este es un proyecto privado. Si deseas contribuir, por favor contacta al autor.
-
-## 📄 Licencia
-
-Este proyecto es privado y no está disponible para uso público sin autorización.
-
-## 👨‍💻 Autor
-
-**RISK KEEP**
-
+El sistema de descargas del backend cuenta con un mecanismo de reintentos automático que incluye **rotación de IPs** (a través de la red Tor o asignación dinámica de IPv6) para evadir las restricciones y bloqueos automáticos de descarga de YouTube.
 
 ---
+
+## Estructura del Repositorio
+
+*   **`musicrk/`**: Aplicación frontend desarrollada en Flutter para dispositivos móviles.
+*   **`backend/`**: Servidor API en Python (Flask) que procesa las búsquedas de canciones/álbumes y gestiona las descargas y conversiones.
+
+---
+
+## Requisitos Previos del Sistema
+
+Antes de iniciar, debes tener instalados los siguientes componentes en tu sistema host:
+
+1.  **Flutter SDK**: Sigue la guía oficial de instalación en [flutter.dev](https://docs.flutter.dev/get-started/install).
+2.  **Python 3.10 o superior**: Disponible en [python.org](https://www.python.org/).
+3.  **FFmpeg** (Mandatorio): Crítico para codificar y empotrar metadatos en los archivos MP3 descargados.
+    *   **Windows**: Descarga desde [ffmpeg.org](https://ffmpeg.org/download.html), extrae el archivo y añade la carpeta `bin` a las variables de entorno de tu sistema (PATH).
+    *   **Linux**: `sudo apt update && sudo apt install ffmpeg`
+    *   **Mac**: `brew install ffmpeg`
+4.  **Tor** (Opcional): Si deseas habilitar la rotación automática de IP a través de proxies locales para descargas masivas ininterrumpidas.
+    *   **Windows**: Descarga e instala Tor Browser o el servicio autónomo de Tor. Configura el puerto de control `9051` y el puerto SOCKS `9050`.
+    *   **Linux**: `sudo apt install tor`
+
+---
+
+## Guía de Instalación y Despliegue
+
+### 1. Clonar el Proyecto
+```bash
+git clone https://github.com/charly-RK/Music-RK.git
+cd Music-RK
+```
+
+---
+
+### 2. Configurar y Levantar el Backend (Python)
+
+Puedes levantar el backend de dos formas: **Localmente** o mediante **Docker**.
+
+#### Opción A: Despliegue Local (Tradicional)
+1.  Navega a la carpeta del backend:
+    ```bash
+    cd backend
+    ```
+2.  Crea e instala las dependencias en un entorno virtual:
+    ```bash
+    # Crear venv
+    python -m venv venv
+    
+    # Activar venv (Windows)
+    .\venv\Scripts\activate
+    # Activar venv (Linux/Mac)
+    source venv/bin/activate
+    
+    # Instalar librerías
+    pip install -r requirements.txt
+    ```
+3.  Inicia el servidor Flask:
+    ```bash
+    python server.py
+    ```
+    El backend se iniciará localmente en `http://localhost:5001`.
+
+#### Opción B: Despliegue con Docker
+El backend está completamente containerizado. El contenedor incluye automáticamente Python, FFmpeg, y el servicio de Tor preconfigurado para rotación de IPs.
+1.  Desde la raíz del proyecto, navega a `backend/` y construye la imagen:
+    ```bash
+    cd backend
+    docker build -t musicrk-backend .
+    ```
+2.  Ejecuta el contenedor exponiendo el puerto `5001`:
+    ```bash
+    docker run -d -p 5001:5001 --name musicrk-backend musicrk-backend
+    ```
+
+---
+
+### 3. Configurar y Levantar el Frontend (Flutter)
+
+1.  Navega a la carpeta de la aplicación móvil:
+    ```bash
+    cd ../musicrk
+    ```
+2.  Obtén todas las dependencias del SDK de Dart y Flutter:
+    ```bash
+    flutter pub get
+    ```
+3.  **Configurar dirección IP de la API**:
+    *   Abre el archivo `lib/config/api_config.dart`.
+    *   Reemplaza el host por la dirección IP de tu máquina en la red local (ejemplo: `http://192.168.1.100:5001` si estás probando con un celular físico conectado a la misma red WiFi).
+4.  Lanza la aplicación en tu emulador o dispositivo físico conectado:
+    ```bash
+    flutter run
+    ```
+
+---
+
+## Control de Errores Comunes de Clonación
+
+---
+
+## Términos de Licencia y Uso
+
+Este proyecto es propiedad privada de **Risk-Keep**. Se permite su clonación, edición y ejecución local estrictamente para fines de **aprendizaje, estudio o uso personal no comercial**. Queda expresamente prohibido su despliegue comercial en producción, redistribución o publicación en tiendas de aplicaciones sin previo consentimiento.
+
+Para ver todos los términos y exclusiones legales, consulte el archivo [LICENSE.txt](file:///c:/Users/RISK/Desktop/Proyectos/%202026/FLUTTER/musicrk_1/LICENSE.txt).

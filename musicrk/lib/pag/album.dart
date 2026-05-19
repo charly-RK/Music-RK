@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import 'play.dart';
 import '../widgets/bottom_player.dart';
 import '../widgets/song_options_sheet.dart';
+import '../widgets/custom_dialogs.dart';
 
 class AlbumPage extends StatefulWidget {
   final Map<String, dynamic> album;
@@ -43,6 +44,14 @@ class _AlbumPageState extends State<AlbumPage> {
     _audioService.currentSongStream.listen((_) {
       if (mounted) setState(() {});
     });
+
+    // Escuchar cambios en la estructura de álbumes/playlists para recargar
+    DatabaseHelper.instance.albumsStream.listen((_) {
+      if (mounted) _loadSongs();
+    });
+    DatabaseHelper.instance.playlistsStream.listen((_) {
+      if (mounted) _loadSongs();
+    });
   }
 
   @override
@@ -71,18 +80,14 @@ class _AlbumPageState extends State<AlbumPage> {
         );
         songs = allSongs.where((song) => song.data.startsWith(folderPath)).toList();
       } else {
-        // Lógica de álbum personalizada
+        // Lógica de álbum personalizada (Playlist)
         final songPaths = await DatabaseHelper.instance.getAlbumSongs(widget.album['id']);
         if (songPaths.isNotEmpty) {
-          // Consultar todas las canciones para obtener detalles, luego filtrar por ruta
-          // Nota: Consultar todas las canciones puede ser lento. Optimización: Consultar rutas específicas si es posible o cachear.
-          // Por ahora, consultamos todas y filtramos, lo cual es seguro pero quizás no sea la más eficiente.
-          final allSongs = await _audioQuery.querySongs(
-            sortType: SongSortType.TITLE,
-            orderType: OrderType.ASC_OR_SMALLER,
-            uriType: UriType.EXTERNAL,
-            ignoreCase: true,
-          );
+          // Usar AudioService.songs como fuente de verdad para obtener metadatos actualizados
+          if (_audioService.songs.isEmpty) {
+            await _audioService.querySongs(updateList: true);
+          }
+          final allSongs = _audioService.songs;
           
           // Filtrar canciones que coincidan con los paths en el álbum
           songs = allSongs.where((song) => songPaths.contains(song.data)).toList();
@@ -161,7 +166,7 @@ class _AlbumPageState extends State<AlbumPage> {
             ? 'Álbum' 
             : 'Artista';
             
-    _showCustomToast(message, _sortOrder);
+    AppDialogs.showToast(context, message);
   }
 
   void _showCustomToast(String message, String iconType) {
@@ -259,12 +264,7 @@ class _AlbumPageState extends State<AlbumPage> {
       debugPrint("Canción no encontrada incluso después de recargar");
       // Mostrar mensaje al usuario
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error: No se pudo encontrar la canción. Intenta reiniciar la app.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialogs.showToast(context, 'Error: No se pudo encontrar la canción', isError: true);
       }
     }
   }
@@ -286,6 +286,7 @@ class _AlbumPageState extends State<AlbumPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => SongOptionsSheet(
         song: song,
+        onRefresh: () => _loadSongs(),
         onPlay: () {
           final index = _songs.indexOf(song);
           if (index != -1) _playAlbum(index);
@@ -295,11 +296,9 @@ class _AlbumPageState extends State<AlbumPage> {
         onDelete: isCustomAlbum ? () async {
            await DatabaseHelper.instance.removeSongFromAlbum(widget.album['id'], song.data);
            _loadSongs(); // Refrescar lista
-           if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
-               const SnackBar(content: Text("Canción eliminada del álbum")),
-             );
-           }
+            if (mounted) {
+              AppDialogs.showToast(context, "Canción eliminada del álbum");
+            }
         } : null,
       ),
     );
@@ -315,85 +314,33 @@ class _AlbumPageState extends State<AlbumPage> {
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1A1F3D),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           border: Border.all(color: Colors.white10),
         ),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
               ),
-              const SizedBox(height: 20),
-              
-              _buildOptionTile(
-                icon: Icons.play_arrow_rounded,
-                title: "Reproducir Todo",
-                onTap: () {
-                  Navigator.pop(context);
-                  _playAlbum(0);
-                },
-              ),
-              _buildOptionTile(
-                icon: Icons.shuffle_rounded,
-                title: "Aleatorio",
-                onTap: () {
-                  Navigator.pop(context);
-                  _shuffleSongs();
-                  _playAlbum(0);
-                },
-              ),
-              _buildOptionTile(
-                icon: Icons.info_outline_rounded,
-                title: "Información",
-                onTap: () {
-                  Navigator.pop(context);
-                  _showAlbumInfo();
-                },
-              ),
-
+              const SizedBox(height: 24),
+              _buildOptionTile(icon: Icons.play_arrow_rounded, title: "Reproducir Todo", onTap: () { Navigator.pop(context); _playAlbum(0); }),
+              _buildOptionTile(icon: Icons.shuffle_rounded, title: "Aleatorio", onTap: () { Navigator.pop(context); _shuffleSongs(); _playAlbum(0); }),
+              _buildOptionTile(icon: Icons.info_outline_rounded, title: "Información", onTap: () { Navigator.pop(context); _showAlbumInfo(); }),
               if (isCustomAlbum) ...[
                 const Divider(color: Colors.white10, height: 1, indent: 20, endIndent: 20),
-                _buildOptionTile(
-                  icon: Icons.edit_rounded,
-                  title: 'Modificar Álbum',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showRenameAlbumDialog();
-                  },
-                ),
-                _buildOptionTile(
-                  icon: Icons.delete_forever_rounded,
-                  title: 'Eliminar Álbum',
-                  color: Colors.redAccent,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showDeleteAlbumConfirmation(isFolder: false);
-                  },
-                ),
+                _buildOptionTile(icon: Icons.edit_rounded, title: 'Modificar Álbum', onTap: () { Navigator.pop(context); _showRenameAlbumDialog(); }),
+                _buildOptionTile(icon: Icons.delete_forever_rounded, title: 'Eliminar Álbum', color: Colors.redAccent, onTap: () { Navigator.pop(context); _showDeleteAlbumConfirmation(isFolder: false); }),
               ],
-
               if (isFolderAlbum) ...[
                 const Divider(color: Colors.white10, height: 1, indent: 20, endIndent: 20),
-                _buildOptionTile(
-                  icon: Icons.folder_off_rounded,
-                  title: 'Desvincular Carpeta',
-                  subtitle: 'Solo se elimina de la app',
-                  color: Colors.redAccent,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showDeleteAlbumConfirmation(isFolder: true);
-                  },
-                ),
+                _buildOptionTile(icon: Icons.folder_off_rounded, title: 'Desvincular Carpeta', subtitle: 'Solo se elimina de la app', color: Colors.redAccent, onTap: () { Navigator.pop(context); _showDeleteAlbumConfirmation(isFolder: true); }),
               ],
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -417,27 +364,17 @@ class _AlbumPageState extends State<AlbumPage> {
   }
 
   void _showAlbumInfo() {
-    showDialog(
+    AppDialogs.showCustomDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: const Text("Información del Álbum", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow("Nombre:", widget.album['name'] ?? "Desconocido"),
-            _buildInfoRow("Tipo:", widget.album['type'] == 'folder' ? "Carpeta Local" : "Álbum Personalizado"),
-            _buildInfoRow("Canciones:", "${_songs.length}"),
-            if (widget.album['type'] == 'folder')
-              _buildInfoRow("Ruta:", widget.album['folder_path'] ?? "Desconocida"),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cerrar", style: TextStyle(color: Color(0xFFE91E63))),
-          ),
+      title: "Información del Álbum",
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInfoRow("Nombre:", widget.album['name'] ?? "Desconocido"),
+          _buildInfoRow("Tipo:", widget.album['type'] == 'folder' ? "Carpeta Local" : "Álbum Personalizado"),
+          _buildInfoRow("Canciones:", "${_songs.length}"),
+          if (widget.album['type'] == 'folder') _buildInfoRow("Ruta:", widget.album['folder_path'] ?? "Desconocida"),
         ],
       ),
     );
@@ -459,86 +396,34 @@ class _AlbumPageState extends State<AlbumPage> {
   }
 
   void _showRenameAlbumDialog() {
-    final controller = TextEditingController(text: widget.album['name']);
-    showDialog(
+    AppDialogs.showTextInputDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: const Text("Renombrar Álbum", style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "Nuevo nombre",
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE91E63))),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                await DatabaseHelper.instance.updateAlbum(
-                  widget.album['id'],
-                  {'name': controller.text},
-                );
-                
-                if (mounted) {
-                  Navigator.pop(context);
-                  setState(() {
-                    widget.album['name'] = controller.text;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Álbum renombrado")),
-                  );
-                }
-              }
-            },
-            child: const Text("Guardar", style: TextStyle(color: Color(0xFFE91E63))),
-          ),
-        ],
-      ),
+      title: "Renombrar Álbum",
+      hintText: "Nuevo nombre",
+      initialValue: widget.album['name'],
+      onConfirm: (newName) async {
+        await DatabaseHelper.instance.updateAlbum(widget.album['id'], {'name': newName});
+        if (mounted) {
+          setState(() { widget.album['name'] = newName; });
+        }
+      },
     );
   }
 
   void _showDeleteAlbumConfirmation({required bool isFolder}) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: Text(isFolder ? "Desvincular Carpeta" : "Eliminar Álbum", style: const TextStyle(color: Colors.white)),
-        content: Text(
-          isFolder 
-            ? "¿Estás seguro de que deseas desvincular esta carpeta? Las canciones NO se borrarán de tu dispositivo."
-            : "¿Estás seguro de que deseas eliminar este álbum? Las canciones no se borrarán del dispositivo.",
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await DatabaseHelper.instance.deleteAlbum(widget.album['id']);
-              if (mounted) {
-                Navigator.pop(context); // Cerrar diálogo
-                Navigator.pop(context); // Cerrar página
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(isFolder ? "Carpeta desvinculada" : "Álbum eliminado")),
-                );
-              }
-            },
-            child: Text(isFolder ? "Desvincular" : "Eliminar", style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: isFolder ? "Desvincular Carpeta" : "Eliminar Álbum",
+      message: isFolder 
+        ? "¿Estás seguro de que deseas desvincular esta carpeta? Las canciones NO se borrarán de tu dispositivo."
+        : "¿Estás seguro de que deseas eliminar este álbum? Las canciones no se borrarán del dispositivo.",
+      confirmLabel: isFolder ? "Desvincular" : "Eliminar",
+      onConfirm: () async {
+        await DatabaseHelper.instance.deleteAlbum(widget.album['id']);
+        if (mounted) {
+          Navigator.pop(context); // Close detail page
+        }
+      },
     );
   }
 

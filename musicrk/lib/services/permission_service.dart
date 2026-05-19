@@ -7,54 +7,57 @@ class PermissionService {
   factory PermissionService() => _instance;
   PermissionService._internal();
 
-  /// Request storage permissions for audio files
+  /// Solicitar permisos iniciales de forma ordenada
+  Future<void> requestInitialPermissions() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      // 1. Notificaciones
+      await Permission.notification.request();
+
+      // 2. Almacenamiento / Audio
+      // En Android 13+ (API 33), se usa READ_MEDIA_AUDIO
+      // En versiones anteriores, READ_EXTERNAL_STORAGE
+      // Intentamos ambos de forma secuencial para máxima compatibilidad
+      
+      await Permission.audio.request();
+      await Permission.storage.request();
+      
+      // Opcional: MANAGE_EXTERNAL_STORAGE para renombrar/eliminar en Android 11+
+      // Solo si el usuario realmente lo necesita, pero por ahora lo pedimos 
+      // si ya denegaron los básicos para intentar una vía más amplia.
+    } catch (e) {
+      debugPrint('Error en requestInitialPermissions: $e');
+    }
+  }
+
+  /// Verifica si tenemos los permisos críticos para funcionar
+  Future<bool> hasCriticalPermissions() async {
+    if (!Platform.isAndroid) return true;
+
+    try {
+      final audioStatus = await Permission.audio.status;
+      final storageStatus = await Permission.storage.status;
+      
+      return audioStatus.isGranted || storageStatus.isGranted;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Request storage permissions for audio files (específico)
   Future<bool> requestStoragePermission() async {
     try {
-      // For Android 13+ (API 33+), use READ_MEDIA_AUDIO
-      // For older versions, use READ_EXTERNAL_STORAGE
       if (Platform.isAndroid) {
-        // Try audio permission first (Android 13+)
-        var status = await Permission.audio.status;
+        var status = await Permission.audio.request();
+        if (status.isGranted) return true;
         
-        if (status.isGranted) {
-          return true;
-        }
-        
-        if (status.isDenied) {
-          status = await Permission.audio.request();
-          if (status.isGranted) {
-            return true;
-          }
-        }
-        
-        // Fallback to storage permission for older Android versions
-        var storageStatus = await Permission.storage.status;
-        
-        if (storageStatus.isGranted) {
-          return true;
-        }
-        
-        if (storageStatus.isDenied) {
-          storageStatus = await Permission.storage.request();
-          return storageStatus.isGranted;
-        }
-        
-        // If permanently denied, return false
-        return false;
-      }
-      
-      // For iOS or other platforms
-      return true;
-    } catch (e) {
-      // If permission check fails, try to continue anyway
-      // This handles cases where Permission.audio might not be available
-      try {
         var storageStatus = await Permission.storage.request();
         return storageStatus.isGranted;
-      } catch (e2) {
-        // Last resort - return true and let the app try to work
-        return true;
       }
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -68,7 +71,7 @@ class PermissionService {
       }
       return true;
     } catch (e) {
-      return true; // Assume granted if check fails
+      return false;
     }
   }
 
@@ -76,33 +79,8 @@ class PermissionService {
   Future<bool> requestNotificationPermission() async {
     try {
       if (Platform.isAndroid) {
-        var status = await Permission.notification.status;
-        
-        if (status.isGranted) {
-          return true;
-        }
-        
-        if (status.isDenied) {
-          status = await Permission.notification.request();
-          return status.isGranted;
-        }
-        
-        return false;
-      }
-      
-      // For iOS or other platforms
-      return true;
-    } catch (e) {
-      debugPrint('Error requesting notification permission: $e');
-      return false;
-    }
-  }
-
-  /// Check if notification permission is granted
-  Future<bool> hasNotificationPermission() async {
-    try {
-      if (Platform.isAndroid) {
-        return await Permission.notification.isGranted;
+        var status = await Permission.notification.request();
+        return status.isGranted;
       }
       return true;
     } catch (e) {
@@ -113,5 +91,23 @@ class PermissionService {
   /// Open app settings if permission is permanently denied
   Future<void> openSettings() async {
     await openAppSettings();
+  }
+
+  /// Manejo profesional de estados de permiso
+  Future<String?> getPermissionErrorMessage() async {
+    if (!Platform.isAndroid) return null;
+
+    final audio = await Permission.audio.status;
+    final storage = await Permission.storage.status;
+
+    if (audio.isPermanentlyDenied || storage.isPermanentlyDenied) {
+      return "El permiso ha sido denegado permanentemente. Por favor, actívalo en los ajustes del sistema.";
+    }
+    
+    if (audio.isDenied && storage.isDenied) {
+      return "Se requiere acceso a tus archivos de audio para mostrar y reproducir tu música.";
+    }
+
+    return null;
   }
 }

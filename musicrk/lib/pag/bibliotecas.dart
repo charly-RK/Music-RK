@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/database_helper.dart';
 import 'album.dart';
+import '../widgets/custom_dialogs.dart';
 
 class LibraryPage extends StatefulWidget {
   final VoidCallback? onBackTap;
@@ -33,6 +34,11 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refreshLibraries();
+    
+    // Escuchar cambios en la base de datos para recargar automáticamente
+    DatabaseHelper.instance.albumsStream.listen((_) {
+      if (mounted) _refreshLibraries();
+    });
   }
   
   @override
@@ -106,21 +112,11 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
       });
       await _refreshLibraries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓ Álbum "$name" creado exitosamente'),
-            backgroundColor: const Color(0xFFE91E63),
-          ),
-        );
+        AppDialogs.showToast(context, 'Álbum "$name" creado exitosamente');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al crear álbum: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialogs.showToast(context, 'Error al crear álbum', isError: true);
       }
     }
   }
@@ -138,22 +134,12 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
         });
         await _refreshLibraries();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✓ Carpeta "$folderName" agregada exitosamente'),
-              backgroundColor: const Color(0xFFE91E63),
-            ),
-          );
+          AppDialogs.showToast(context, 'Carpeta "$folderName" agregada');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al agregar carpeta: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialogs.showToast(context, 'Error al agregar carpeta', isError: true);
       }
     }
   }
@@ -343,79 +329,26 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
         decoration: const BoxDecoration(
           color: Color(0xFF1A1F3D),
           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black45,
-              blurRadius: 25,
-              offset: Offset(0, -10),
-            ),
-          ],
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Opciones de Biblioteca',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _buildOptionTile(
-                  context,
-                  icon: Icons.album_rounded,
-                  title: 'Crear nuevo álbum',
-                  subtitle: 'Organiza tus canciones manualmente',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showCreateAlbumForm(context);
-                  },
-                ),
-                _buildOptionTile(
-                  context,
-                  icon: Icons.create_new_folder_rounded,
-                  title: 'Añadir nueva carpeta',
-                  subtitle: 'Importar desde el almacenamiento',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _addFolder();
-                  },
-                ),
-                _buildOptionTile(
-                  context,
-                  icon: Icons.playlist_add_rounded,
-                  title: 'Importar lista',
-                  subtitle: 'Desde archivos .m3u o .pls',
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                ),
-                _buildOptionTile(
-                  context,
-                  icon: Icons.sync_rounded,
-                  title: 'Escanear biblioteca',
-                  subtitle: 'Buscar cambios recientes',
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                ),
-                const SizedBox(height: 30),
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 24),
+              const Text('Opciones de Biblioteca', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              _buildOptionTile(context, icon: Icons.album_rounded, title: 'Crear nuevo álbum', subtitle: 'Organiza tus canciones manualmente', onTap: () { Navigator.pop(context); _showCreateAlbumForm(context); }),
+              _buildOptionTile(context, icon: Icons.create_new_folder_rounded, title: 'Añadir nueva carpeta', subtitle: 'Importar desde el almacenamiento', onTap: () { Navigator.pop(context); _addFolder(); }),
+              _buildOptionTile(context, icon: Icons.playlist_add_rounded, title: 'Importar lista', subtitle: 'Desde archivos .m3u o .pls', onTap: () { Navigator.pop(context); }),
+              _buildOptionTile(context, icon: Icons.sync_rounded, title: 'Escanear biblioteca', subtitle: 'Buscar cambios recientes', onTap: () { Navigator.pop(context); }),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),
@@ -434,140 +367,82 @@ class _LibraryPageState extends State<LibraryPage> with AutomaticKeepAliveClient
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.9,
-          ),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
           decoration: const BoxDecoration(
-            color: Color(0xFF121212),
+            color: Color(0xFF1A1F3D),
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 15),
+              const SizedBox(height: 16),
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
               ),
-              const SizedBox(height: 15),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Nuevo Álbum',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 24),
+              const Text('Nuevo Álbum', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      Center(
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
-                              width: 2,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_photo_alternate_rounded,
-                                  size: 40, color: Colors.white.withOpacity(0.3)),
-                              const SizedBox(height: 5),
-                              Text(
-                                'Portada',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.3),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
                       _buildTextField('Nombre del Álbum *', Icons.title_rounded, controller: nameController),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 16),
                       _buildTextField('Artista / Banda', Icons.person_rounded, controller: artistController),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(child: _buildTextField('Año', Icons.calendar_today_rounded, controller: yearController)),
-                          const SizedBox(width: 15),
+                          const SizedBox(width: 16),
                           Expanded(child: _buildTextField('Género', Icons.music_note_rounded, controller: genreController)),
                         ],
                       ),
-                      const SizedBox(height: 15),
-                      _buildTextField('Descripción', Icons.description_rounded, maxLines: 2, controller: descController),
-                      const SizedBox(height: 30),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (nameController.text.isNotEmpty) {
-                              _createAlbum(
-                                nameController.text,
-                                artistController.text,
-                                yearController.text,
-                                genreController.text,
-                                descController.text,
-                              );
-                              Navigator.pop(context);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('El nombre del álbum es obligatorio')),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE91E63),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            elevation: 5,
-                            shadowColor: const Color(0xFFE91E63).withOpacity(0.4),
-                          ),
-                          child: const Text(
-                            'Crear Álbum',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                      const SizedBox(height: 16),
+                      _buildTextField('Descripción', Icons.description_rounded, maxLines: 3, controller: descController),
+                      const SizedBox(height: 32),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                side: const BorderSide(color: Colors.white10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              child: const Text('Cancelar', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                if (nameController.text.isNotEmpty) {
+                                  _createAlbum(nameController.text, artistController.text, yearController.text, genreController.text, descController.text);
+                                  Navigator.of(context).pop();
+                                } else {
+                                  AppDialogs.showToast(context, 'El nombre es obligatorio', isError: true);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE91E63),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 8,
+                                shadowColor: const Color(0xFFE91E63).withOpacity(0.5),
+                              ),
+                              child: const Text('Crear', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),

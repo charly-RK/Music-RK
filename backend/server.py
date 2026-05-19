@@ -3,7 +3,9 @@ from flask_cors import CORS
 import yt_dlp
 import os
 import json
+import subprocess
 from pathlib import Path
+from proxy_manager import get_spotdl_proxy_args
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Flutter app
@@ -31,11 +33,14 @@ def search_videos():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'nocheckcertificate': True,
+            'source_address': '0.0.0.0',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'extractor_args': {'youtube': {'player_client': ['web_creator', 'ios']}},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            search_results = ydl.extract_info(f"ytsearch10:{query}", download=False)
+            search_results = ydl.extract_info(f"ytsearch10:{query} official audio", download=False)
             
             videos = []
             for entry in search_results.get('entries', []):
@@ -57,88 +62,106 @@ def search_videos():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+def find_downloaded_file(downloads_dir, title_query):
+    """Find the downloaded file in the directory using modification time and word matching."""
+    import time
+    files = list(downloads_dir.glob('*.mp3'))
+    if not files:
+        files = list(downloads_dir.glob('*'))
+        
+    if not files:
+        return None
+        
+    # Sort by modification time, newest first
+    files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    
+    # If the newest file was modified within the last 5 minutes, it's our file
+    if time.time() - files[0].stat().st_mtime < 300:
+        return files[0]
+        
+    # If the download was skipped (duplicate), find the file matching the title words
+    words = [w.lower() for w in title_query.split() if len(w) > 2 and w.isalnum()]
+    best_match = None
+    max_matches = 0
+    
+    for f in files:
+        matches = sum(1 for w in words if w in f.name.lower())
+        if matches > max_matches:
+            max_matches = matches
+            best_match = f
+            
+    if best_match and max_matches > 0:
+        return best_match
+        
+    return files[0]
 
 @app.route('/download', methods=['POST'])
 def download_video():
-    """Download YouTube video as MP3"""
+    """Download YouTube video as MP3 using spotdl with proxy fallback"""
     try:
-        data = request.json
+        data = request.json or {}
         video_id = data.get('video_id', '')
         title = data.get('title', 'audio')
         
         if not video_id:
             return jsonify({'error': 'Video ID is required'}), 400
         
-        # Sanitize filename
-        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
-        output_path = DOWNLOAD_DIR / f"{safe_title}.mp3"
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
         
-        # yt-dlp options for MP3 download with metadata and artwork
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [
-                {
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '320',
-                },
-                {
-                    'key': 'FFmpegMetadata',
-                    'add_metadata': True,
-                },
-                {
-                    'key': 'EmbedThumbnail',
-                    'already_have_thumbnail': False,
-                }
-            ],
-            'writethumbnail': True,  # Download thumbnail
-            'outtmpl': str(DOWNLOAD_DIR / f"{safe_title}.%(ext)s"),
-            'quiet': False,
-            'no_warnings': False,
-            'progress_hooks': [lambda d: print(f"Progress: {d.get('_percent_str', '0%')}")],
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-        }
+        last_error = None
+        success = False
         
-        # Download
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        # Try direct download first, then fallback to rotated proxy/Tor/IPv6
+        for attempt in range(1, 3):
+            cmd = ['spotdl', 'download', video_url, '--output', str(DOWNLOAD_DIR)]
+            
+            # Get proxy args for this attempt
+            proxy_args = get_spotdl_proxy_args(attempt=attempt)
+            cmd.extend(proxy_args)
+            
+            if os.path.exists('cookies.txt'):
+                cmd.extend(['--cookie-file', 'cookies.txt'])
+                
+            print(f"Executing spotdl download command (Attempt {attempt}): {' '.join(cmd)}")
+            
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                print(f"spotdl output (Attempt {attempt}):", result.stdout)
+                success = True
+                break
+            except subprocess.CalledProcessError as e:
+                print(f"Attempt {attempt} failed: {e.stderr or e.stdout or str(e)}")
+                last_error = e
+                
+        if not success:
+            return jsonify({'error': f'Download failed after all attempts: {str(last_error)}'}), 500
+            
+        # Find the correct downloaded file (handles duplicate skips)
+        downloaded_file = find_downloaded_file(DOWNLOAD_DIR, title)
         
-        # Check if file exists
-        if output_path.exists():
+        if downloaded_file:
             return jsonify({
                 'success': True,
-                'file_path': f"{safe_title}.mp3",  # Return only filename
-                'file_size': output_path.stat().st_size
+                'file_path': downloaded_file.name,
+                'file_size': downloaded_file.stat().st_size
             })
         else:
-            return jsonify({'error': 'Download failed'}), 500
-    
+            return jsonify({'error': 'No file found after download'}), 500
+            
     except Exception as e:
+        print(f"Error in download: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/download_file/<path:filename>', methods=['GET'])
 def download_file(filename):
-    """Serve downloaded MP3 file with streaming"""
+    """Serve downloaded MP3 file"""
     try:
-        file_path = DOWNLOAD_DIR / filename
+        from urllib.parse import unquote
+        decoded_filename = unquote(filename)
+        file_path = DOWNLOAD_DIR / decoded_filename
+        
         if file_path.exists():
-            def generate():
-                with open(file_path, 'rb') as f:
-                    while True:
-                        chunk = f.read(8192)  # Read in 8KB chunks
-                        if not chunk:
-                            break
-                        yield chunk
-            
-            from flask import Response
-            return Response(
-                generate(),
-                mimetype='audio/mpeg',
-                headers={
-                    'Content-Disposition': f'attachment; filename="{filename}"',
-                    'Content-Length': str(file_path.stat().st_size)
-                }
-            )
+            return send_file(file_path, as_attachment=True, download_name=file_path.name)
         else:
             return jsonify({'error': 'File not found'}), 404
     except Exception as e:
@@ -159,16 +182,22 @@ def search_albums():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'nocheckcertificate': True,
+            'source_address': '0.0.0.0',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'extractor_args': {'youtube': {'player_client': ['web_creator', 'ios']}},
         }
+
+        if os.path.exists('cookies.txt'):
+            ydl_opts['cookiefile'] = 'cookies.txt'
         
         albums = []
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             # Search for the artist's channel
             try:
-                # First, find the artist's channel
-                channel_query = f"ytsearch1:{query} official"
+                # First, find the artist's channel (Topic preferred)
+                channel_query = f"ytsearch1:{query} topic"
                 print(f"Searching for channel: {channel_query}")
                 search_results = ydl.extract_info(channel_query, download=False)
                 
@@ -381,53 +410,41 @@ def download_album():
             downloaded_files = []
             total_tracks = len(playlist_info.get('entries', []))
             
-            # Download each track
+            # Download each track using spotdl with proxy fallback
             for idx, entry in enumerate(playlist_info.get('entries', []), 1):
                 if entry:
                     video_id = entry.get('id', '')
                     title = entry.get('title', f'Track {idx}')
-                    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
                     
-                    output_path = album_folder / f"{safe_title}.mp3"
+                    track_url = f"https://www.youtube.com/watch?v={video_id}"
                     
-                    # Download options with metadata and artwork
-                    download_opts = {
-                        'format': 'bestaudio/best',
-                        'postprocessors': [
-                            {
-                                'key': 'FFmpegExtractAudio',
-                                'preferredcodec': 'mp3',
-                                'preferredquality': '320',
-                            },
-                            {
-                                'key': 'FFmpegMetadata',
-                                'add_metadata': True,
-                            },
-                            {
-                                'key': 'EmbedThumbnail',
-                                'already_have_thumbnail': False,
-                            }
-                        ],
-                        'writethumbnail': True,  # Download thumbnail
-                        'outtmpl': str(album_folder / f"{safe_title}.%(ext)s"),
-                        'quiet': False,
-                        'no_warnings': False,
-                        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-                    }
-                    
-                    try:
-                        with yt_dlp.YoutubeDL(download_opts) as download_ydl:
-                            download_ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+                    success = False
+                    for attempt in range(1, 3):
+                        cmd = ['spotdl', 'download', track_url, '--output', str(album_folder)]
                         
-                        if output_path.exists():
-                            downloaded_files.append({
-                                'title': title,
-                                'file_path': f"{safe_album_name}/{safe_title}.mp3",
-                                'progress': f"{idx}/{total_tracks}"
-                            })
-                    except Exception as e:
-                        print(f"Error downloading {title}: {e}")
-                        continue
+                        proxy_args = get_spotdl_proxy_args(attempt=attempt)
+                        cmd.extend(proxy_args)
+                            
+                        if os.path.exists('cookies.txt'):
+                            cmd.extend(['--cookie-file', 'cookies.txt'])
+                            
+                        try:
+                            subprocess.run(cmd, check=True, capture_output=True)
+                            success = True
+                            break
+                        except Exception as e:
+                            print(f"Attempt {attempt} for track {title} failed: {e}")
+                            
+                    if success:
+                        downloaded_file = find_downloaded_file(album_folder, title)
+                        if downloaded_file:
+                            file_rel_path = f"{safe_album_name}/{downloaded_file.name}"
+                            if not any(f['file_path'] == file_rel_path for f in downloaded_files):
+                                downloaded_files.append({
+                                    'title': title,
+                                    'file_path': file_rel_path,
+                                    'progress': f"{idx}/{total_tracks}"
+                                })
             
             return jsonify({
                 'success': True,
@@ -437,6 +454,72 @@ def download_album():
             })
     
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/download_spotify', methods=['POST'])
+def download_spotify():
+    """Download Spotify track using spotdl"""
+    try:
+        data = request.json or {}
+        spotify_url = data.get('spotify_url', '')
+        
+        if not spotify_url:
+            return jsonify({'error': 'Spotify URL is required'}), 400
+            
+        # Basic validation of URL/URI to prevent command injection
+        if not (spotify_url.startswith('https://open.spotify.com/') or spotify_url.startswith('spotify:')):
+            return jsonify({'error': 'Invalid Spotify URL'}), 400
+            
+        # Sanitize input to only allow URL-safe characters
+        safe_url = "".join(c for c in spotify_url if c.isalnum() or c in ('/', ':', '?', '=', '-', '_', '.')).strip()
+        
+        # Execute spotdl
+        cmd = ['spotdl', 'download', safe_url, '--output', str(DOWNLOAD_DIR)]
+        
+        # Pass proxy if environment variable is set
+        proxy = os.environ.get('SPOTDL_PROXY')
+        if proxy:
+            cmd.extend(['--proxy', proxy])
+            
+        # Pass cookie file if cookies.txt exists (underlying yt-dlp uses it)
+        if os.path.exists('cookies.txt'):
+            cmd.extend(['--cookie-file', 'cookies.txt'])
+            
+        print(f"Executing spotdl command: {' '.join(cmd)}")
+        
+        # Run spotdl command. Note: spotdl downloaded files will go to DOWNLOAD_DIR
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print("spotdl output:", result.stdout)
+        
+        # Find the downloaded file (newest MP3 in downloads directory)
+        files = list(DOWNLOAD_DIR.glob('*.mp3'))
+        if not files:
+            # Maybe the download failed or returned different extension, let's look for any audio
+            files = list(DOWNLOAD_DIR.glob('*'))
+            # Filter for files modified within last 2 minutes
+            import time
+            now = time.time()
+            recent_files = [f for f in files if f.is_file() and now - f.stat().st_mtime < 120]
+            if not recent_files:
+                return jsonify({'error': 'No file downloaded', 'details': result.stderr}), 500
+            newest_file = max(recent_files, key=os.path.getmtime)
+        else:
+            newest_file = max(files, key=os.path.getmtime)
+            
+        filename = newest_file.name
+        print(f"Downloaded Spotify track successfully saved as: {filename}")
+        
+        return jsonify({
+            'success': True,
+            'file_path': filename,
+            'file_size': newest_file.stat().st_size
+        })
+        
+    except subprocess.CalledProcessError as e:
+        print(f"spotdl process failed: {e.stdout}\n{e.stderr}")
+        return jsonify({'error': 'spotdl failed', 'details': e.stderr}), 500
+    except Exception as e:
+        print(f"Error downloading Spotify track: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])

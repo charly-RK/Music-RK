@@ -31,8 +31,9 @@ class _AllSongsPageState extends State<AllSongsPage> {
   Timer? _debounce;
   String _sortOrder = 'album'; // 'titulo', 'album', 'artista'
   OverlayEntry? _overlayEntry;
-  int _displayedCount = 100;
-  final int _incrementCount = 100;
+  int _displayedCount = 50; // Empezar con menos para carga inicial rápida
+  final int _incrementCount = 50;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -44,6 +45,19 @@ class _AllSongsPageState extends State<AllSongsPage> {
     _playingSubscription = _audioService.playingStream.listen((_) {
       if (mounted) setState(() {});
     });
+    
+    // Configurar scroll infinito
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
+      if (_filteredSongs.length > _displayedCount) {
+        setState(() {
+          _displayedCount += _incrementCount;
+        });
+      }
+    }
   }
 
   Future<void> _initData() async {
@@ -61,6 +75,8 @@ class _AllSongsPageState extends State<AllSongsPage> {
       _overlayEntry?.remove();
       _overlayEntry = null;
     }
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -78,7 +94,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
         _allSongs = List.from(_audioService.songs);
         _filteredSongs = List.from(_allSongs);
         _applySorting(); // Aplicar orden de clasificación guardado
-        _displayedCount = 100; // Resetear paginación
+        _displayedCount = 50; // Resetear paginación
         _isLoading = false;
       });
     }
@@ -123,7 +139,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
         setState(() {
           _filteredSongs = List.from(_allSongs);
           _applySorting(); // reaplicar orden de clasificación
-          _displayedCount = 100; // Resetear paginación
+          _displayedCount = 50; // Resetear paginación
         });
         return;
       }
@@ -164,7 +180,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
       setState(() {
         _filteredSongs = uniqueFiltered;
         _applySorting(); // reaplicar orden de clasificación a los resultados de la búsqueda
-        _displayedCount = 100; // Resetear paginación
+        _displayedCount = 50; // Resetear paginación
       });
     });
   }
@@ -298,6 +314,7 @@ class _AllSongsPageState extends State<AllSongsPage> {
           final index = _filteredSongs.indexOf(song);
           if (index != -1) _playSong(index);
         },
+        onRefresh: () => _loadSongs(),
         // onAddToFavorites: usa la lógica predeterminada
         // onInfo: usa la lógica predeterminada
       ),
@@ -463,36 +480,19 @@ class _AllSongsPageState extends State<AllSongsPage> {
                                       child: ClipRRect(
                                         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
                                         child: ListView.builder(
+                                          controller: _scrollController,
                                           padding: const EdgeInsets.only(top: 10, bottom: 100),
                                           itemCount: (_filteredSongs.length > _displayedCount) 
                                               ? _displayedCount + 1 
                                               : _filteredSongs.length,
                                           itemBuilder: (context, index) {
                                             if (index == _displayedCount) {
-                                              return Padding(
-                                                padding: const EdgeInsets.symmetric(vertical: 20),
+                                              return const Padding(
+                                                padding: EdgeInsets.symmetric(vertical: 20),
                                                 child: Center(
-                                                  child: TextButton(
-                                                    onPressed: () {
-                                                      setState(() {
-                                                        _displayedCount += _incrementCount;
-                                                      });
-                                                    },
-                                                    style: TextButton.styleFrom(
-                                                      foregroundColor: const Color(0xFFE91E63),
-                                                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                                                      backgroundColor: const Color(0xFFE91E63).withOpacity(0.1),
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(20),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      "Mostrar más (${_filteredSongs.length - _displayedCount} restantes)",
-                                                      style: const TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Color(0xFFE91E63),
                                                   ),
                                                 ),
                                               );

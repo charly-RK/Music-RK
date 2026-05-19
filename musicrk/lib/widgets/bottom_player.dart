@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_service.dart';
 import '../pag/play.dart';
 
-class BottomPlayer extends StatelessWidget {
+class BottomPlayer extends StatefulWidget {
   final AudioService audioService;
   final bool isPlaying;
   final SongModel? fallbackSong; // Show this when nothing is playing
@@ -16,9 +17,59 @@ class BottomPlayer extends StatelessWidget {
   });
 
   @override
+  State<BottomPlayer> createState() => _BottomPlayerState();
+}
+
+class _BottomPlayerState extends State<BottomPlayer> with SingleTickerProviderStateMixin {
+  late AnimationController _rotationController;
+  StreamSubscription? _playingSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    );
+
+    _playingSubscription = widget.audioService.playingStream.listen((isPlaying) {
+      if (mounted) {
+        if (isPlaying) {
+          _rotationController.repeat();
+        } else {
+          _rotationController.stop();
+        }
+      }
+    });
+
+    if (widget.isPlaying) {
+      _rotationController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(BottomPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      if (widget.isPlaying) {
+        _rotationController.repeat();
+      } else {
+        _rotationController.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    _playingSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Use current song or fallback to first song
-    final song = audioService.currentSong ?? fallbackSong;
+    final song = widget.audioService.currentSong ?? widget.fallbackSong;
     
     if (song == null) return const SizedBox.shrink();
 
@@ -28,7 +79,7 @@ class BottomPlayer extends StatelessWidget {
           context,
           PageRouteBuilder(
             opaque: false,
-            pageBuilder: (_, __, ___) => PlayPage(songIndex: audioService.currentIndex),
+            pageBuilder: (_, __, ___) => PlayPage(songIndex: widget.audioService.currentIndex),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               const begin = Offset(0.0, 1.0);
               const end = Offset.zero;
@@ -44,10 +95,10 @@ class BottomPlayer extends StatelessWidget {
         direction: DismissDirection.horizontal,
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.startToEnd) {
-            await audioService.playPrevious();
+            await widget.audioService.playPrevious();
             return false;
           } else {
-            await audioService.playNext();
+            await widget.audioService.playNext();
             return false;
           }
         },
@@ -118,21 +169,27 @@ class BottomPlayer extends StatelessWidget {
                   child: Row(
                     children: [
                       // Album Art
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: QueryArtworkWidget(
-                          id: song.id,
-                          type: ArtworkType.AUDIO,
-                          artworkWidth: 50,
-                          artworkHeight: 50,
-                          artworkQuality: FilterQuality.low,
-                          keepOldArtwork: true,
-                          size: 100, // Optimized size for thumbnail
-                          nullArtworkWidget: Container(
-                            width: 50,
-                            height: 50,
-                            color: Colors.grey[800],
-                            child: const Icon(Icons.music_note, color: Colors.white54),
+                      RotationTransition(
+                        turns: _rotationController,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(25), // Circular for rotation effect
+                          child: QueryArtworkWidget(
+                            id: song.id,
+                            type: ArtworkType.AUDIO,
+                            artworkWidth: 50,
+                            artworkHeight: 50,
+                            artworkQuality: FilterQuality.low,
+                            keepOldArtwork: true,
+                            size: 100, // Optimized size for thumbnail
+                            nullArtworkWidget: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800],
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.music_note, color: Colors.white54),
+                            ),
                           ),
                         ),
                       ),
@@ -169,17 +226,17 @@ class BottomPlayer extends StatelessWidget {
                       const SizedBox(width: 8),
                       // Play/Pause Button with Progress
                       StreamBuilder<Duration>(
-                        stream: audioService.positionStream,
+                        stream: widget.audioService.positionStream,
                         builder: (context, snapshot) {
                           final position = snapshot.data ?? Duration.zero;
-                          final duration = audioService.player.duration ?? Duration.zero;
+                          final duration = widget.audioService.player.duration ?? Duration.zero;
                           double progress = 0.0;
                           if (duration.inMilliseconds > 0) {
                             progress = position.inMilliseconds / duration.inMilliseconds;
                             if (progress > 1.0) progress = 1.0;
                           }
                           return GestureDetector(
-                            onTap: () => audioService.togglePlayPause(),
+                            onTap: () => widget.audioService.togglePlayPause(),
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
@@ -194,7 +251,7 @@ class BottomPlayer extends StatelessWidget {
                                   ),
                                 ),
                                 Icon(
-                                  isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                                  widget.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
                                   color: const Color(0xFFE91E63),
                                   size: 40,
                                 ),

@@ -2,7 +2,7 @@ class ApiConfig {
   // IMPORTANTE: Cambia esta IP por la IP de tu PC
   // Para obtener tu IP en Windows: abre CMD y ejecuta "ipconfig"
   // Busca "IPv4 Address" (ejemplo: 192.168.1.100)
-  static const String baseUrl = 'https://web-production-90906.up.railway.app';
+  static const String baseUrl = 'http://10.15.61.162:5001';
   
   // Endpoints
   static const String searchEndpoint = '/search';

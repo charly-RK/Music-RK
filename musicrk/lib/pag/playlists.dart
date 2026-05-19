@@ -3,6 +3,7 @@ import 'package:on_audio_query/on_audio_query.dart';
 import '../services/database_helper.dart';
 import '../services/audio_service.dart';
 import 'playlist_detail.dart';
+import '../widgets/custom_dialogs.dart';
 
 class PlaylistsPage extends StatefulWidget {
   const PlaylistsPage({super.key});
@@ -19,6 +20,11 @@ class _PlaylistsPageState extends State<PlaylistsPage> {
   void initState() {
     super.initState();
     _loadPlaylists();
+    
+    // Escuchar cambios en la base de datos para recargar automáticamente
+    DatabaseHelper.instance.playlistsStream.listen((_) {
+      if (mounted) _loadPlaylists();
+    });
   }
 
   Future<void> _loadPlaylists() async {
@@ -317,92 +323,78 @@ class _PlaylistsPageState extends State<PlaylistsPage> {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
 
-    showDialog(
+    AppDialogs.showCustomDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Nueva Playlist',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Nombre',
-                labelStyle: const TextStyle(color: Colors.white70),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white24),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE91E63)),
-                ),
+      title: 'Nueva Playlist',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Nombre',
+              labelStyle: const TextStyle(color: Colors.white70),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.white24),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE91E63)),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descriptionController,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Descripción (opcional)',
-                labelStyle: const TextStyle(color: Colors.white70),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white24),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE91E63)),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Ingresa un nombre')),
-                );
-                return;
-              }
-
-              await DatabaseHelper.instance.createPlaylist({
-                'name': nameController.text.trim(),
-                'description': descriptionController.text.trim(),
-              });
-
-              if (mounted) {
-                Navigator.pop(context);
-                _loadPlaylists();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✓ Playlist creada'),
-                    backgroundColor: Color(0xFFE91E63),
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE91E63),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: descriptionController,
+            style: const TextStyle(color: Colors.white),
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: 'Descripción (opcional)',
+              labelStyle: const TextStyle(color: Colors.white70),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.white24),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE91E63)),
+              ),
             ),
-            child: const Text('Crear', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            if (nameController.text.trim().isEmpty) {
+              AppDialogs.showToast(context, 'Ingresa un nombre', isError: true);
+              return;
+            }
+
+            await DatabaseHelper.instance.createPlaylist({
+              'name': nameController.text.trim(),
+              'description': descriptionController.text.trim(),
+            });
+
+            if (mounted) {
+              Navigator.of(dialogContext).pop();
+              _loadPlaylists();
+              AppDialogs.showToast(context, 'Playlist creada');
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE91E63),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Crear', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

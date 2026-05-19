@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/download_service.dart';
+import '../widgets/custom_dialogs.dart';
 
 class YoutubeAlbumDetailPage extends StatefulWidget {
   final AlbumResult album;
@@ -41,9 +42,7 @@ class _YoutubeAlbumDetailPageState extends State<YoutubeAlbumDetailPage> {
       _downloadingIds.add(video.id);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Iniciando descarga de "${video.title}"...')),
-    );
+    AppDialogs.showToast(context, 'Iniciando descarga de "${video.title}"...');
 
     _downloadService.downloadAndConvertToMp3Async(video);
     
@@ -87,114 +86,104 @@ class _YoutubeAlbumDetailPageState extends State<YoutubeAlbumDetailPage> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // --- Contenido principal (scrollable) ---
-          SingleChildScrollView(
-            child: Column(
-              children: [
-                // --- Header ---
-                Container(
-                  height: 380,
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF1A1F3D),
-                        Color(0xFF121212),
-                      ],
+          CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 340,
+                floating: false,
+                pinned: true,
+                backgroundColor: const Color(0xFF1A1F3D),
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                flexibleSpace: FlexibleSpaceBar(
+                  collapseMode: CollapseMode.pin,
+                  background: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFF1A1F3D),
+                          Color(0xFF121212),
+                        ],
+                      ),
                     ),
-                  ),
-                  child: SafeArea(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                                onPressed: () => Navigator.pop(context),
+                    child: SafeArea(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 30), // Space for upper status bar and leading button
+                          // Album Art
+                          Hero(
+                            tag: 'album_art_${widget.album.id}',
+                            child: Container(
+                              width: 130,
+                              height: 130,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white10, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // Album Art
-                        Hero(
-                          tag: 'album_art_${widget.album.id}',
-                          child: Container(
-                            width: 150,
-                            height: 150,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white10, width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.5),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            child: ClipOval(
-                              child: Image.network(
-                                widget.album.thumbnail,
-                                width: 150,
-                                height: 150,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  color: Colors.grey[900],
-                                  child: const Icon(Icons.album, size: 80, color: Colors.white24),
+                              child: ClipOval(
+                                child: Image.network(
+                                  widget.album.thumbnail,
+                                  width: 130,
+                                  height: 130,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: Colors.grey[900],
+                                    child: const Icon(Icons.album, size: 60, color: Colors.white24),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Text(
-                            widget.album.title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Text(
+                              widget.album.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.album.author,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 14,
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.album.author,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Info Row
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildInfoBadge("${_tracks.length} Canciones", Icons.music_note_rounded),
-                          ],
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          _buildInfoBadge("${_tracks.length} Canciones", Icons.music_note_rounded),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                
-                // --- Espacio para el botón flotante ---
-                const SizedBox(height: 70),
-                
-                // --- Lista de canciones ---
-                Container(
+              ),
+              
+              // --- Lista de canciones ---
+              SliverToBoxAdapter(
+                child: Container(
                   color: Colors.white,
-                  padding: const EdgeInsets.only(bottom: 100, top: 20),
+                  padding: const EdgeInsets.only(bottom: 120, top: 16),
                   child: _isLoading
                       ? const SizedBox(
                           height: 200,
@@ -304,8 +293,8 @@ class _YoutubeAlbumDetailPageState extends State<YoutubeAlbumDetailPage> {
                               },
                             ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           
           // --- Botón flotante de descargar álbum (fijo) ---
@@ -383,22 +372,6 @@ class _YoutubeAlbumDetailPageState extends State<YoutubeAlbumDetailPage> {
                     ),
                   ),
                 ),
-              ),
-            ),
-          ),
-          
-          // --- Botón de retroceso (superpuesto) ---
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 10,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                onPressed: () => Navigator.pop(context),
               ),
             ),
           ),

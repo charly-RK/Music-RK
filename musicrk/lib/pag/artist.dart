@@ -6,6 +6,7 @@ import '../services/audio_service.dart' as app_audio;
 import 'play.dart';
 import '../widgets/bottom_player.dart';
 import '../widgets/song_options_sheet.dart';
+import '../widgets/custom_dialogs.dart';
 
 class ArtistPage extends StatefulWidget {
   final ArtistModel artist;
@@ -226,11 +227,7 @@ class _ArtistPageState extends State<ArtistPage> {
     if (globalIndex != -1) {
       await _audioService.playSong(globalIndex);
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: No se pudo encontrar la canción.'), backgroundColor: Colors.red),
-        );
-      }
+        AppDialogs.showToast(context, 'Error: No se pudo encontrar la canción', isError: true);
     }
   }
 
@@ -248,6 +245,7 @@ class _ArtistPageState extends State<ArtistPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => SongOptionsSheet(
         song: song,
+        onRefresh: () => _loadSongs(),
         onPlay: () {
           final index = _songs.indexOf(song);
           if (index != -1) _playArtist(index);

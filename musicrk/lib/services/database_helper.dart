@@ -22,13 +22,17 @@ class DatabaseHelper {
   final _notificationsStreamController = StreamController<void>.broadcast();
   Stream<void> get notificationsStream => _notificationsStreamController.stream;
 
+  // Stream to notify about playlist changes
+  final _playlistsStreamController = StreamController<void>.broadcast();
+  Stream<void> get playlistsStream => _playlistsStreamController.stream;
+
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -105,6 +109,25 @@ CREATE TABLE notifications (
   cantidad $intType,
   fecha $textType,
   leida $boolType
+)
+''');
+    }
+
+    if (oldVersion < 5) {
+      const textType = 'TEXT NOT NULL';
+      const textNullable = 'TEXT';
+      const intType = 'INTEGER NOT NULL';
+      
+      await db.execute('''
+CREATE TABLE songs (
+  id INTEGER PRIMARY KEY,
+  title $textType,
+  artist $textNullable,
+  album $textNullable,
+  data $textType,
+  duration $intType,
+  uri $textNullable,
+  display_name $textNullable
 )
 ''');
     }
@@ -196,6 +219,20 @@ CREATE TABLE notifications (
   leida $boolType
 )
 ''');
+
+    // Songs cache table
+    await db.execute('''
+CREATE TABLE songs (
+  id INTEGER PRIMARY KEY,
+  title $textType,
+  artist $textNullable,
+  album $textNullable,
+  data $textType,
+  duration $intType,
+  uri $textNullable,
+  display_name $textNullable
+)
+''');
   }
 
   Future<int> createAlbum(Map<String, dynamic> album) async {
@@ -230,6 +267,7 @@ CREATE TABLE notifications (
       'album_id': albumId,
       'song_path': songPath,
     });
+    _albumsStreamController.add(null);
   }
 
   Future<List<String>> getAlbumSongs(int albumId) async {
@@ -250,6 +288,7 @@ CREATE TABLE notifications (
       where: 'album_id = ? AND song_path = ?',
       whereArgs: [albumId, songPath],
     );
+    _albumsStreamController.add(null);
   }
 
   Future<bool> isSongInAlbum(int albumId, String songPath) async {
@@ -293,7 +332,9 @@ CREATE TABLE notifications (
   Future<int> createPlaylist(Map<String, dynamic> playlist) async {
     final db = await database;
     playlist['created_at'] = DateTime.now().toIso8601String();
-    return await db.insert('playlists', playlist);
+    final id = await db.insert('playlists', playlist);
+    _playlistsStreamController.add(null);
+    return id;
   }
 
   /// Get all playlists
@@ -312,13 +353,17 @@ CREATE TABLE notifications (
   /// Update playlist
   Future<int> updatePlaylist(int id, Map<String, dynamic> playlist) async {
     final db = await database;
-    return await db.update('playlists', playlist, where: 'id = ?', whereArgs: [id]);
+    final count = await db.update('playlists', playlist, where: 'id = ?', whereArgs: [id]);
+    _playlistsStreamController.add(null);
+    return count;
   }
 
   /// Delete playlist
   Future<int> deletePlaylist(int id) async {
     final db = await database;
-    return await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
+    final count = await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
+    _playlistsStreamController.add(null);
+    return count;
   }
 
   /// Duplicate playlist
@@ -358,6 +403,7 @@ CREATE TABLE notifications (
     song['position'] = songs.length;
     song['added_at'] = DateTime.now().toIso8601String();
     await db.insert('playlist_songs', song);
+    _playlistsStreamController.add(null);
   }
 
   /// Remove song from playlist
@@ -368,6 +414,7 @@ CREATE TABLE notifications (
       where: 'playlist_id = ? AND song_id = ?',
       whereArgs: [playlistId, songId],
     );
+    _playlistsStreamController.add(null);
     
     // Reorder positions using batch
     final songs = await getPlaylistSongs(playlistId);
@@ -394,6 +441,17 @@ CREATE TABLE notifications (
       whereArgs: [playlistId],
       orderBy: 'position ASC',
     );
+  }
+
+  /// Check if song is already in playlist
+  Future<bool> isSongInPlaylist(int playlistId, int songId) async {
+    final db = await database;
+    final result = await db.query(
+      'playlist_songs',
+      where: 'playlist_id = ? AND song_id = ?',
+      whereArgs: [playlistId, songId],
+    );
+    return result.isNotEmpty;
   }
 
   /// Update song positions (for reordering)
@@ -473,8 +531,102 @@ CREATE TABLE notifications (
     _notificationsStreamController.add(null);
   }
 
+  // ========== SONG CACHE METHODS ==========
+  
+  /// Clear and replace all songs in cache
+  Future<void> replaceSongCache(List<Map<String, dynamic>> songs) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('songs');
+      final batch = txn.batch();
+      for (var song in songs) {
+        batch.insert('songs', song);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  /// Get all songs from cache
+  Future<List<Map<String, dynamic>>> getCachedSongs() async {
+    final db = await database;
+    return await db.query('songs');
+  }
+
+  /// Update or insert songs (bulk)
+  Future<void> upsertSongs(List<Map<String, dynamic>> songs) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var song in songs) {
+      batch.insert('songs', song, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<int> getSongsCount() async {
+    final db = await database;
+    return Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM songs')) ?? 0;
+  }
+
+  Future<int> getArtistsCount() async {
+    final db = await database;
+    // Aproximación rápida: contar artistas únicos en la tabla de canciones
+    final result = await db.rawQuery('SELECT COUNT(DISTINCT artist) as count FROM songs');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getAlbumsCount() async {
+    final db = await database;
+    // Aproximación rápida: contar álbumes únicos en la tabla de canciones
+    final result = await db.rawQuery('SELECT COUNT(DISTINCT album) as count FROM songs');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<void> close() async {
     final db = await database;
     db.close();
+  }
+
+  // ========== SYNC METHODS FOR RENAME/DELETE ==========
+
+  Future<void> removeSongEverywhere(int songId, String path) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Eliminar de favoritos
+      await txn.delete('favorites', where: 'song_id = ? OR data = ?', whereArgs: [songId, path]);
+      
+      // 2. Eliminar de playlists
+      await txn.delete('playlist_songs', where: 'song_id = ? OR data = ?', whereArgs: [songId, path]);
+      
+      // 3. Eliminar de álbumes personalizados
+      await txn.delete('album_songs', where: 'song_path = ?', whereArgs: [path]);
+      
+      // 4. Eliminar de la tabla de caché principal
+      await txn.delete('songs', where: 'id = ? OR data = ?', whereArgs: [songId, path]);
+    });
+  }
+
+  Future<void> updateSongPathAndTitle(int songId, String oldPath, String newPath, String newTitle) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Actualizar favoritos
+      await txn.update('favorites', 
+        {'title': newTitle, 'data': newPath}, 
+        where: 'song_id = ? OR data = ?', whereArgs: [songId, oldPath]);
+      
+      // 2. Actualizar playlists
+      await txn.update('playlist_songs', 
+        {'title': newTitle, 'data': newPath}, 
+        where: 'song_id = ? OR data = ?', whereArgs: [songId, oldPath]);
+      
+      // 3. Actualizar álbumes personalizados
+      await txn.update('album_songs', 
+        {'song_path': newPath}, 
+        where: 'song_path = ?', whereArgs: [oldPath]);
+      
+      // 4. Actualizar tabla de caché principal
+      await txn.update('songs', 
+        {'title': newTitle, 'data': newPath, 'display_name': newPath.split('/').last}, 
+        where: 'id = ? OR data = ?', whereArgs: [songId, oldPath]);
+    });
   }
 }

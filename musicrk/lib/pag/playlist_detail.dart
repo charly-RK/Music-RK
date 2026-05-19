@@ -5,6 +5,7 @@ import '../services/database_helper.dart';
 import '../services/audio_service.dart';
 import '../widgets/song_options_sheet.dart';
 import '../widgets/bottom_player.dart';
+import '../widgets/custom_dialogs.dart';
 import 'play.dart';
 
 class PlaylistDetailPage extends StatefulWidget {
@@ -33,6 +34,11 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     });
     _audioService.currentSongStream.listen((song) {
       if (mounted) setState(() => _currentSongId = song?.id);
+    });
+
+    // Escuchar cambios en la base de datos para recargar automáticamente
+    DatabaseHelper.instance.playlistsStream.listen((_) {
+      if (mounted) _loadSongs();
     });
   }
 
@@ -316,23 +322,15 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       confirmDismiss: (direction) async {
-        return await showDialog(
+        bool confirm = false;
+        await AppDialogs.showConfirmDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Eliminar canción'),
-            content: const Text('¿Quieres eliminar esta canción de la playlist?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancelar'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
+          title: 'Quitar canción',
+          message: '¿Deseas eliminar esta canción de la playlist?',
+          confirmLabel: 'Quitar',
+          onConfirm: () => confirm = true,
         );
+        return confirm;
       },
       onDismissed: (direction) async {
         await DatabaseHelper.instance.removeSongFromPlaylist(
@@ -490,94 +488,17 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     }
   }
 
-  void _showAddSongsDialog() async {
-    final allSongs = _audioService.songs;
-    final selectedSongs = <SongModel>[];
-
-    await showDialog(
+  void _showAddSongsDialog() {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Agregar canciones'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: ListView.builder(
-              itemCount: allSongs.length,
-              itemBuilder: (context, index) {
-                final song = allSongs[index];
-                final isSelected = selectedSongs.contains(song);
-                
-                return CheckboxListTile(
-                  value: isSelected,
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        selectedSongs.add(song);
-                      } else {
-                        selectedSongs.remove(song);
-                      }
-                    });
-                  },
-                  title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(song.artist ?? 'Desconocido', maxLines: 1),
-                  secondary: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: QueryArtworkWidget(
-                      id: song.id,
-                      type: ArtworkType.AUDIO,
-                      artworkWidth: 40,
-                      artworkHeight: 40,
-                      nullArtworkWidget: Container(
-                        width: 40,
-                        height: 40,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.music_note, size: 20),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: selectedSongs.isEmpty
-                  ? null
-                  : () async {
-                      for (var song in selectedSongs) {
-                        await DatabaseHelper.instance.addSongToPlaylist(
-                          widget.playlist['id'],
-                          {
-                            'song_id': song.id,
-                            'title': song.title,
-                            'artist': song.artist,
-                            'album': song.album,
-                            'data': song.data,
-                            'duration': song.duration,
-                          },
-                        );
-                      }
-                      if (mounted) {
-                        Navigator.pop(context);
-                        _loadSongs();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('✓ ${selectedSongs.length} ${selectedSongs.length == 1 ? 'canción agregada' : 'canciones agregadas'}'),
-                            backgroundColor: const Color(0xFFE91E63),
-                          ),
-                        );
-                      }
-                    },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE91E63)),
-              child: Text('Agregar (${selectedSongs.length})'),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddSongsSheet(
+        playlistId: widget.playlist['id'],
+        audioService: _audioService,
+        onSongsAdded: () {
+          _loadSongs();
+        },
       ),
     );
   }
@@ -585,12 +506,17 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   void _showSortOptions() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F3D),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        ),
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Ordenar por', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Ordenar por', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             _buildSortOption('Posición', 'position', Icons.reorder_rounded),
             _buildSortOption('Título', 'title', Icons.sort_by_alpha_rounded),
@@ -606,8 +532,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   Widget _buildSortOption(String label, String value, IconData icon) {
     final isSelected = _sortBy == value;
     return ListTile(
-      leading: Icon(icon, color: isSelected ? const Color(0xFFE91E63) : null),
-      title: Text(label, style: TextStyle(color: isSelected ? const Color(0xFFE91E63) : null)),
+      leading: Icon(icon, color: isSelected ? const Color(0xFFE91E63) : Colors.white70),
+      title: Text(label, style: TextStyle(color: isSelected ? const Color(0xFFE91E63) : Colors.white)),
       trailing: isSelected ? const Icon(Icons.check, color: Color(0xFFE91E63)) : null,
       onTap: () {
         setState(() => _sortBy = value);
@@ -647,46 +573,14 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
               ),
               const SizedBox(height: 24),
-              _buildOptionTile(
-                icon: Icons.play_arrow_rounded,
-                title: "Reproducir Todo",
-                onTap: () {
-                  Navigator.pop(context);
-                  _playAll();
-                },
-              ),
-              _buildOptionTile(
-                icon: Icons.shuffle_rounded,
-                title: "Aleatorio",
-                onTap: () {
-                  Navigator.pop(context);
-                  _shufflePlay();
-                },
-              ),
-              _buildOptionTile(
-                icon: Icons.edit_rounded,
-                title: "Renombrar Playlist",
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRenameDialog();
-                },
-              ),
+              _buildOptionTile(icon: Icons.play_arrow_rounded, title: "Reproducir Todo", onTap: () { Navigator.pop(context); _playAll(); }),
+              _buildOptionTile(icon: Icons.shuffle_rounded, title: "Aleatorio", onTap: () { Navigator.pop(context); _shufflePlay(); }),
+              _buildOptionTile(icon: Icons.edit_rounded, title: "Renombrar Playlist", onTap: () { Navigator.pop(context); _showRenameDialog(); }),
               const Divider(color: Colors.white10, height: 1, indent: 20, endIndent: 20),
-              _buildOptionTile(
-                icon: Icons.delete_outline_rounded,
-                title: "Eliminar Playlist",
-                color: const Color(0xFFE91E63),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteConfirmation();
-                },
-              ),
+              _buildOptionTile(icon: Icons.delete_outline_rounded, title: "Eliminar Playlist", color: const Color(0xFFE91E63), onTap: () { Navigator.pop(context); _showDeleteConfirmation(); }),
               const SizedBox(height: 24),
             ],
           ),
@@ -727,82 +621,33 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   }
 
   void _showRenameDialog() {
-    final controller = TextEditingController(text: widget.playlist['name']);
-    showDialog(
+    AppDialogs.showTextInputDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: const Text("Renombrar Playlist", style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "Nuevo nombre",
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE91E63))),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                await DatabaseHelper.instance.updatePlaylist(
-                  widget.playlist['id'],
-                  {'name': controller.text},
-                );
-                if (mounted) {
-                  Navigator.pop(context);
-                  setState(() {
-                    widget.playlist['name'] = controller.text;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Playlist renombrada")),
-                  );
-                }
-              }
-            },
-            child: const Text("Guardar", style: TextStyle(color: Color(0xFFE91E63))),
-          ),
-        ],
-      ),
+      title: "Renombrar Playlist",
+      hintText: "Nuevo nombre",
+      initialValue: widget.playlist['name'],
+      onConfirm: (newName) async {
+        await DatabaseHelper.instance.updatePlaylist(widget.playlist['id'], {'name': newName});
+        if (mounted) {
+          setState(() { widget.playlist['name'] = newName; });
+        }
+      },
     );
   }
 
   void _showDeleteConfirmation() {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1F3D),
-        title: const Text("Eliminar Playlist", style: TextStyle(color: Colors.white)),
-        content: const Text(
-          "¿Estás seguro de que deseas eliminar esta playlist?",
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await DatabaseHelper.instance.deletePlaylist(widget.playlist['id']);
-              if (mounted) {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Close detail page
-              }
-            },
-            child: const Text("Eliminar", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: "Eliminar Playlist",
+      message: "¿Estás seguro de que deseas eliminar esta playlist?",
+      confirmLabel: "Eliminar",
+      onConfirm: () async {
+        await DatabaseHelper.instance.deletePlaylist(widget.playlist['id']);
+        if (mounted) Navigator.pop(context);
+      },
     );
   }
+
   void _showSongOptions(SongModel song) {
     showModalBottomSheet(
       context: context,
@@ -810,6 +655,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       isScrollControlled: true,
       builder: (context) => SongOptionsSheet(
         song: song,
+        onRefresh: () => _loadSongs(),
         onPlay: () {
           // Find index in current list
           final index = _songs.indexWhere((s) => s['song_id'] == song.id);
@@ -824,11 +670,248 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
            );
            _loadSongs(); // Refresh list
            if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
-               const SnackBar(content: Text("Canción eliminada de la playlist")),
-             );
+             AppDialogs.showToast(context, "Canción eliminada de la playlist");
            }
         },
+      ),
+    );
+  }
+}
+
+class _AddSongsSheet extends StatefulWidget {
+  final int playlistId;
+  final AudioService audioService;
+  final VoidCallback onSongsAdded;
+
+  const _AddSongsSheet({
+    required this.playlistId,
+    required this.audioService,
+    required this.onSongsAdded,
+  });
+
+  @override
+  State<_AddSongsSheet> createState() => _AddSongsSheetState();
+}
+
+class _AddSongsSheetState extends State<_AddSongsSheet> {
+  final List<SongModel> _selectedSongs = [];
+  String _searchQuery = "";
+  late List<SongModel> _allSongs;
+  late List<SongModel> _filteredSongs;
+  bool _isSaving = false;
+  Set<int> _existingSongIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _allSongs = widget.audioService.songs;
+    _filteredSongs = _allSongs;
+    _loadExistingSongs();
+  }
+
+  Future<void> _loadExistingSongs() async {
+    final existing = await DatabaseHelper.instance.getPlaylistSongs(widget.playlistId);
+    if (mounted) {
+      setState(() {
+        _existingSongIds = existing.map((s) => s['song_id'] as int).toSet();
+      });
+    }
+  }
+
+  void _filterSongs(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _filteredSongs = _allSongs;
+      } else {
+        _filteredSongs = _allSongs.where((song) {
+          final title = song.title.toLowerCase();
+          final artist = (song.artist ?? "").toLowerCase();
+          final q = query.toLowerCase();
+          return title.contains(q) || artist.contains(q);
+        }).toList();
+      }
+    });
+  }
+
+  Future<void> _saveSongs() async {
+    if (_selectedSongs.isEmpty) return;
+    setState(() => _isSaving = true);
+    
+    try {
+      int addedCount = 0;
+      for (var song in _selectedSongs) {
+        if (_existingSongIds.contains(song.id)) continue;
+        
+        await DatabaseHelper.instance.addSongToPlaylist(
+          widget.playlistId,
+          {
+            'song_id': song.id,
+            'title': song.title,
+            'artist': song.artist,
+            'album': song.album,
+            'data': song.data,
+            'duration': song.duration,
+          },
+        );
+        addedCount++;
+      }
+      widget.onSongsAdded();
+      if (mounted) {
+        if (addedCount > 0) {
+          AppDialogs.showToast(context, 'Se agregaron $addedCount canciones');
+        }
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      debugPrint("Error saving songs to playlist: $e");
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1F3D),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Agregar canciones',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (_selectedSongs.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setState(() => _selectedSongs.clear()),
+                    child: const Text('Limpiar', style: TextStyle(color: Colors.white54)),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: TextField(
+                onChanged: _filterSongs,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Buscar canciones...',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                  prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withOpacity(0.3)),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _filteredSongs.length,
+              itemBuilder: (context, index) {
+                final song = _filteredSongs[index];
+                final isSelected = _selectedSongs.contains(song);
+                final isAlreadyIn = _existingSongIds.contains(song.id);
+                
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFE91E63).withOpacity(0.1) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    onTap: isAlreadyIn ? null : () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedSongs.remove(song);
+                        } else {
+                          _selectedSongs.add(song);
+                        }
+                      });
+                    },
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: QueryArtworkWidget(
+                        id: song.id,
+                        type: ArtworkType.AUDIO,
+                        artworkWidth: 48,
+                        artworkHeight: 48,
+                        nullArtworkWidget: Container(
+                          width: 48,
+                          height: 48,
+                          color: Colors.white10,
+                          child: const Icon(Icons.music_note, color: Colors.white30),
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      song.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      song.artist ?? 'Desconocido',
+                      style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                      maxLines: 1,
+                    ),
+                    trailing: isAlreadyIn
+                      ? const Icon(Icons.library_add_check_rounded, color: Colors.white24)
+                      : isSelected 
+                        ? const Icon(Icons.check_circle_rounded, color: Color(0xFFE91E63))
+                        : Icon(Icons.add_circle_outline_rounded, color: Colors.white.withOpacity(0.2)),
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _selectedSongs.isEmpty || _isSaving ? null : _saveSongs,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE91E63),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.white10,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: _isSaving 
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(
+                      _selectedSongs.isEmpty ? 'Selecciona canciones' : 'Agregar ${_selectedSongs.length} ${_selectedSongs.length == 1 ? 'canción' : 'canciones'}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

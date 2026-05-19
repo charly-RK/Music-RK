@@ -1,0 +1,16 @@
+0000000000000000000000000000000000000000 e41dac51a43eef4dd1b45c35e9b9eb7957b4416c charly-RK <carlosquishpe2002@gmail.com> 1765376231 -0500	commit (initial): Backend Render
+e41dac51a43eef4dd1b45c35e9b9eb7957b4416c e41dac51a43eef4dd1b45c35e9b9eb7957b4416c charly-RK <carlosquishpe2002@gmail.com> 1765376300 -0500	Branch: renamed refs/heads/master to refs/heads/main
+e41dac51a43eef4dd1b45c35e9b9eb7957b4416c 0f6aedabab04cb01cc9c73968d6774f7d3510db5 charly-RK <carlosquishpe2002@gmail.com> 1765377648 -0500	commit: Backend Music
+0f6aedabab04cb01cc9c73968d6774f7d3510db5 3600bbc9839fa7adedb6db95228811ffcb0e9a4e charly-RK <carlosquishpe2002@gmail.com> 1765384772 -0500	commit: Server Music
+3600bbc9839fa7adedb6db95228811ffcb0e9a4e 3600bbc9839fa7adedb6db95228811ffcb0e9a4e charly-RK <carlosquishpe2002@gmail.com> 1765384811 -0500	Branch: renamed refs/heads/main to refs/heads/main
+3600bbc9839fa7adedb6db95228811ffcb0e9a4e 3600bbc9839fa7adedb6db95228811ffcb0e9a4e charly-RK <carlosquishpe2002@gmail.com> 1765385430 -0500	Branch: renamed refs/heads/main to refs/heads/main
+3600bbc9839fa7adedb6db95228811ffcb0e9a4e 9c4555216541bf4314c27bb7c2380f965ca69c79 charly-RK <carlosquishpe2002@gmail.com> 1765385937 -0500	commit: Dockerfile
+9c4555216541bf4314c27bb7c2380f965ca69c79 5eab89f317292e3304305fd9a40d286d0cf33d57 charly-RK <carlosquishpe2002@gmail.com> 1765386822 -0500	commit: SERVER M
+5eab89f317292e3304305fd9a40d286d0cf33d57 fe529651830d0331f402d49909c1cdfda8f12ed6 charly-RK <carlosquishpe2002@gmail.com> 1765596932 -0500	commit: SERVER
+fe529651830d0331f402d49909c1cdfda8f12ed6 d36b7bb78e1ad7cc206bdeb33a0ed12c76403bd3 charly-RK <carlosquishpe2002@gmail.com> 1765597385 -0500	commit: SERVER
+d36b7bb78e1ad7cc206bdeb33a0ed12c76403bd3 f9e25a9b418ba5758259c8d5507a071f2d1217c7 charly-RK <carlosquishpe2002@gmail.com> 1765597604 -0500	commit: SERVER
+f9e25a9b418ba5758259c8d5507a071f2d1217c7 ed9ce6c1b7afb5247a38ca4e5b2ce3ecef460cc7 charly-RK <carlosquishpe2002@gmail.com> 1765598026 -0500	commit: SERVER
+ed9ce6c1b7afb5247a38ca4e5b2ce3ecef460cc7 313c648afd16efb6cdf797926a48232862326320 charly-RK <carlosquishpe2002@gmail.com> 1765600109 -0500	commit: SERVER
+313c648afd16efb6cdf797926a48232862326320 e4dec13365f63887268f71216ff0113132452278 charly-RK <carlosquishpe2002@gmail.com> 1765658226 -0500	commit: SERVER
+e4dec13365f63887268f71216ff0113132452278 c3ccb72b392a8a9121b7b8f7a6078421a275ad32 charly-RK <carlosquishpe2002@gmail.com> 1765666218 -0500	commit: SERVER
+c3ccb72b392a8a9121b7b8f7a6078421a275ad32 6ff38202b78011e93eb3abf2b171169c13dddb5d charly-RK <carlosquishpe2002@gmail.com> 1765666584 -0500	commit: SERVER
