@@ -101,8 +101,6 @@ El backend está completamente containerizado. El contenedor incluye automática
 
 ---
 
-## Control de Errores Comunes de Clonación
-
 ---
 
 ## Términos de Licencia y Uso
